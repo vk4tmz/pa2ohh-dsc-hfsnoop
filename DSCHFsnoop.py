@@ -304,12 +304,12 @@ def AUDIOin():   # Read the audio from the stream and store the data into the ar
                 AUDIObuffer = buffervalue
 
             try:
-                if buffervalue > 1024:                          # >1024 to avoid problems
+                if buffervalue >= 1024:                          # >1024 to avoid problems
                     data = AUDIOsrc.read(buffervalue)
                     AUDIOsignal1.extend(data)
-            except:
+            except Exception as e:
                 RUNstatus = 4 
-                print(MakeDate(), " Audio buffer reset!")
+                print(MakeDate(), f" Audio buffer reset! {e}")
                 PrintInfo(MakeDate() + " Audio buffer reset!")
     
         # ... RUNstatus == 3: Stop; RUNstatus == 4: Stop and restart ...
@@ -3100,153 +3100,172 @@ def FillYADDship(dbasename):
 
     PrintInfo(filename + " data base inputs: " + str(len(SHIPmmsi)))
 
-################################################################################
-# Utilities / Helper Functions
-################################################################################
-
-S16BE = "<" 
-S16LE = ">"
-
-def read_s16(inp_stream, frame_len: int, endianness:str=S16BE):
-    
-    data = inp_stream.read(frame_len * 2)
-    if not data:
-        return []
-    
-    int_list = []
-    idx = 0;
-    while idx < len(data):
-        
-        try:
-            two_bytes = data[idx:idx+2]
-            value = struct.unpack(f'{endianness}h', two_bytes)[0]
-            int_list.append(value)
-            idx += 2
-        except struct.error as e:
-            # Handle cases where incomplete data is read at the end
-            print(f"Warning: Incomplete 16-bit integer detected at end of input. {e}")
-            break
-    return int_list
-
-def read_s16be(inp_stream, frame_len: int):
-    return read_s16(inp_stream, frame_len, S16BE)
-
-def read_s16le(inp_stream, frame_len: int):
-    return read_s16(inp_stream, frame_len, S16LE)
-
 # ================ Start Make Screen ======================================================
 
-root=Tk()
-root.title("DSCHFsnoop-v02c.py (16-03-2024): MF-HF-DSC Decoder")
+def initializeUI(freq_hz: int):
+    global root
+    global btnstart
+    global btnscroll
+    global btnsyncf
+    global btninfo
+    global btntest
+    global btnmsg
+    global BTNbgcolor
+    global Bsrate
+    global btnsrate
+    global text1
+    global text2
+    global ca
+    
 
-root.minsize(100, 100)
+    # global RUNstatus
+    # global AUTOscroll
+    # global SYNCF
+    # global DEBUG
+    # global BitY
+    # global BitB
+    # global LOWsearchf
+    # global HIGHsearchf
 
-frame1 = Frame(root, background="blue", borderwidth=5, relief=RIDGE)
-frame1.pack(side=TOP, expand=1, fill=X)
+    root=Tk()
+    root.title(f"MF-HF-DSC Decoder - Monitoring Freq: [{args.freq_hz/1000:.01f}] kHz")
 
-frame1a = Frame(root, background="blue", borderwidth=5, relief=RIDGE)
-frame1a.pack(side=TOP, expand=1, fill=X)
+    root.minsize(100, 100)
 
-frame2 = Frame(root, background="black", borderwidth=5, relief=RIDGE)
-frame2.pack(side=TOP, expand=1, fill=X)
+    frame1 = Frame(root, background="blue", borderwidth=5, relief=RIDGE)
+    frame1.pack(side=TOP, expand=1, fill=X)
 
-scrollbar1 = Scrollbar(frame1)
-scrollbar1.pack(side=RIGHT, expand=NO, fill=BOTH)
+    frame1a = Frame(root, background="blue", borderwidth=5, relief=RIDGE)
+    frame1a.pack(side=TOP, expand=1, fill=X)
 
-text1 = Text(frame1, height=1, width=100, yscrollcommand=scrollbar1.set)
-text1.pack(side=RIGHT, expand=1, fill=BOTH)
+    frame2 = Frame(root, background="black", borderwidth=5, relief=RIDGE)
+    frame2.pack(side=TOP, expand=1, fill=X)
 
-ca = Canvas(frame1, width=(SAx + 2*SAmargin), height=SAy, background="grey")
-ca.pack(side=LEFT)
+    scrollbar1 = Scrollbar(frame1)
+    scrollbar1.pack(side=RIGHT, expand=NO, fill=BOTH)
 
-scrollbar1.config(command=text1.yview)
+    text1 = Text(frame1, height=1, width=100, yscrollcommand=scrollbar1.set)
+    text1.pack(side=RIGHT, expand=1, fill=BOTH)
 
-btnstart = Button(frame1a, text="--", width=ButtonWidth, command=Bstart)
-btnstart.pack(side=LEFT)
+    ca = Canvas(frame1, width=(SAx + 2*SAmargin), height=SAy, background="grey")
+    ca.pack(side=LEFT)
 
-btnsrate = Button(frame1a, text="--", width=ButtonWidth, command=Bsrate)
-btnsrate.pack(side=LEFT)
+    scrollbar1.config(command=text1.yview)
 
-btnsyncf = Button(frame1a, text="--", width=ButtonWidth, command=Bsyncf)
-btnsyncf.pack(side=LEFT)
+    btnstart = Button(frame1a, text="--", width=ButtonWidth, command=Bstart)
+    btnstart.pack(side=LEFT)
 
-btnscroll = Button(frame1a, text="Auto Scroll", width=ButtonWidth, command=Bscroll)
-btnscroll.pack(side=LEFT)
+    btnsrate = Button(frame1a, text="--", width=ButtonWidth, command=Bsrate)
+    btnsrate.pack(side=LEFT)
 
-btninfo = Button(frame1a, text="Clear Info", width=ButtonWidth, command=BCLRinfo)
-btninfo.pack(side=RIGHT)
+    btnsyncf = Button(frame1a, text="--", width=ButtonWidth, command=Bsyncf)
+    btnsyncf.pack(side=LEFT)
 
-BTNbgcolor = btninfo.cget("background")
+    btnscroll = Button(frame1a, text="Auto Scroll", width=ButtonWidth, command=Bscroll)
+    btnscroll.pack(side=LEFT)
 
-btnmsg = Button(frame1a, text="Clear MSGs", width=ButtonWidth, command=BCLRscreen)
-btnmsg.pack(side=RIGHT)
+    btninfo = Button(frame1a, text="Clear Info", width=ButtonWidth, command=BCLRinfo)
+    btninfo.pack(side=RIGHT)
 
-btntest = Button(frame1a, text="Test Mode", width=ButtonWidth, command=Btest)
-btntest.pack(side=RIGHT)
+    BTNbgcolor = btninfo.cget("background")
 
-scrollbar2 = Scrollbar(frame2)
-scrollbar2.pack(side=RIGHT, expand=NO, fill=BOTH)
+    btnmsg = Button(frame1a, text="Clear MSGs", width=ButtonWidth, command=BCLRscreen)
+    btnmsg.pack(side=RIGHT)
 
-text2 = Text(frame2, height=33, width=150, yscrollcommand=scrollbar2.set)
-text2.pack(side=TOP, expand=1, fill=X)
+    btntest = Button(frame1a, text="Test Mode", width=ButtonWidth, command=Btest)
+    btntest.pack(side=RIGHT)
 
-scrollbar2.config(command=text2.yview)
+    scrollbar2 = Scrollbar(frame2)
+    scrollbar2.pack(side=RIGHT, expand=NO, fill=BOTH)
+
+    text2 = Text(frame2, height=33, width=150, yscrollcommand=scrollbar2.set)
+    text2.pack(side=TOP, expand=1, fill=X)
+
+    scrollbar2.config(command=text2.yview)
+
+    root.update()                       # Activate updated screens
+
+    Buttontext()                        # Set colors and text of buttons
+
+    FillCC()                            # Make Country Code List
+
+    if DBcoast == 1:
+        FillMultiPSKcoast("MultiPSKcoast.txt")  # Load the MultiPSKcoast data base
+    if DBcoast == 2:
+        FillYADDcoast("YADDcoast.txt")          # Load the YADDcoast data base
+
+    if DBship == 1:
+        FillMultiPSKship("MultiPSKship.txt")    # Load the MultiPSKship data base
+    if DBship == 2:
+        FillYADDship("YADDship.txt")        # Load the YADDcoast data base
 
 
 # ================ Main routine ================================================
-root.update()                       # Activate updated screens
 
-try:
-    os.mkdir(DIR1)
-except:
-    print(DIR1 + " could not be made or already exists")
-try:
-    os.mkdir(DIR2)
-except:
-    print(DIR2 + " could not be made or already exists")
-try:
-    os.mkdir(DIR3)
-except:
-    print(DIR3 + " could not be made or already exists")
-try:
-    os.mkdir(DIRday)
-except:
-    print(DIRday + " could not be made or already exists")
-try:
-    os.mkdir(DIRcoast)
-except:
-    print(DIRcoast + " could not be made or already exists")
-try:
-    os.mkdir(DIRship)
-except:
-    print(DIRship + " could not be made or already exists")
-try:
-    os.mkdir(DIRpos)
-except:
-    print(DIRpos + " could not be made or already exists")
+def initializeFolders():
+    try:
+        os.mkdir(DIR1)
+    except:
+        print(DIR1 + " could not be made or already exists")
+    try:
+        os.mkdir(DIR2)
+    except:
+        print(DIR2 + " could not be made or already exists")
+    try:
+        os.mkdir(DIR3)
+    except:
+        print(DIR3 + " could not be made or already exists")
+    try:
+        os.mkdir(DIRday)
+    except:
+        print(DIRday + " could not be made or already exists")
+    try:
+        os.mkdir(DIRcoast)
+    except:
+        print(DIRcoast + " could not be made or already exists")
+    try:
+        os.mkdir(DIRship)
+    except:
+        print(DIRship + " could not be made or already exists")
+    try:
+        os.mkdir(DIRpos)
+    except:
+        print(DIRpos + " could not be made or already exists")
 
-Buttontext()                        # Set colors and text of buttons
 
-FillCC()                            # Make Country Code List
 
-if DBcoast == 1:
-    FillMultiPSKcoast("MultiPSKcoast.txt")  # Load the MultiPSKcoast data base
-if DBcoast == 2:
-    FillYADDcoast("YADDcoast.txt")          # Load the YADDcoast data base
+def processArgs(parser):
 
-if DBship == 1:
-    FillMultiPSKship("MultiPSKship.txt")    # Load the MultiPSKship data base
-if DBship == 2:
-    FillYADDship("YADDship.txt")        # Load the YADDcoast data base
+    parser = argparse.ArgumentParser(description="KA9Q-Radio Js8 Decoding Controler.")
+    parser.add_argument("-as", "--audio-src", type=str, default="alsa", choices=["alsa","-"], help="Source for audio feed. Expected s16be format for raw / STDIN feed.")
+    parser.add_argument("-f", "--freq-hz", type=int, default=0, help="Frequency (Hz) which feed is streaming from.")
+    parser.add_argument("-sr", "--sig-rate", type=int, default=44100, choices=[11025, 22050, 44100], help="Audio sample.")
+    parser.add_argument("-l", "--log", type=str, default="./dsc_decode.log", help="Log file.")
+    
+    args = parser.parse_args()
 
-SELECTaudiodevice()                 # Select an audio device
+    return args        
 
-Initialize()                        # Set variables
 
-SetDate()                           # Set the Date for the file savings
+if __name__ == "__main__":
 
-PrintInfo("Press START to start")
+    parser = argparse.ArgumentParser(description="SELCAL Monitoring & Decoding Utility.")
+    args = processArgs(parser)
 
-MAINloop()                          # Start the main  loop
+    initializeFolders()
+    initializeUI(args.freq_hz)
+
+    if (args.audio_src == "alsa"):
+        SELECTaudiodevice()             # Select an audio device
+    elif (args.audio_src == "-"):
+        AUDIOsrc = source.RawAudioSource(src=sys.stdin.buffer)
+
+    Initialize()                        # Set variables
+
+    SetDate()                           # Set the Date for the file savings
+
+    PrintInfo("Press START to start")
+
+    MAINloop()                          # Start the main  loop
 
 

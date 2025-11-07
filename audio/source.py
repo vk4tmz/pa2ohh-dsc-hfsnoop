@@ -4,8 +4,7 @@ import numpy
 import pyaudio
 
 from abc import ABCMeta, abstractmethod
-from stream_utils import read_s16, S16BE
-from typing import Iterable
+from typing import Iterable, BinaryIO
 
 #######################################################################
 #  class AudioSource
@@ -13,10 +12,14 @@ from typing import Iterable
 
 class AudioSource(metaclass=ABCMeta):
     
-    sampleRate:int
+    sampleRate: int
+    numChannels: int 
+    chunkSize: int
 
-    def __init__(self, sampleRate:int):
+    def __init__(self, sampleRate:int, numChannels:int=1):
         self.sampleRate = sampleRate
+        self.numChannels = numChannels
+        self.chunkSize = int(self.sampleRate / 10)
 
     @abstractmethod
     def open(self):
@@ -39,19 +42,17 @@ class AudioSource(metaclass=ABCMeta):
 #  class RawAudioSource
 #######################################################################
 
-PABUFFER = 4180000          # Windows=11520000 No Problem, RASPImax: 4180000 Buffer time: (PABUFFER/samplerate/2)sec (2x8 bits)
 FORMAT   = pyaudio.paInt16  # Audio format 16 levels and 2 channels
 
 class AlsaAudioSource(AudioSource):
     srcId:int
     AUDIOdevin = None
-    TRACESopened = 1
 
     PA: pyaudio.PyAudio
     stream: pyaudio.Stream
 
-    def __init__(self, srcId:int, sampleRate:int=44100, format=FORMAT):
-        super().__init__(sampleRate)
+    def __init__(self, srcId:int, sampleRate:int=44100, format=FORMAT, numChannels:int=1):
+        super().__init__(sampleRate, numChannels)
 
         self.srcId = srcId
 
@@ -60,11 +61,12 @@ class AlsaAudioSource(AudioSource):
         self.PA = pyaudio.PyAudio()
     
         self.stream = self.PA.open(format = FORMAT,
-                channels = self.TRACESopened, 
+                channels = self.numChannels, 
                 rate = self.sampleRate, 
                 input = True,
                 output = False,
-                frames_per_buffer = PABUFFER,
+                # Determine the size of frames which will be available for reading:
+                frames_per_buffer = self.chunkSize,
                 input_device_index = self.srcId)
         
     
@@ -95,20 +97,33 @@ class AlsaAudioSource(AudioSource):
 #######################################################################
 
 class RawAudioSource(AudioSource):
-    src: io.TextIOWrapper
+    src: BinaryIO
+    dtype:str
+    chunkSize: int
 
-    def __init__(self, src: io.TextIOWrapper, endianness=S16BE, sampleRate:int=44100):
-        super().__init__(sampleRate)
+    
+    def __init__(self, src: BinaryIO, dtype:str='int16', sampleRate:int=44100, numChannels:int=1):
+        super().__init__(sampleRate, numChannels)
         self.src = src
+        self.dtype = dtype
 
     def open(self):
         pass
     
     def read(self, frame_size) -> Iterable[int]:
-        pass
+        raw_data = self.src.read(frame_size * numpy.dtype(self.dtype).itemsize * self.numChannels)
+
+        if not raw_data:
+            # End of input
+            return iter([])
+
+        # Convert raw bytes to a NumPy array with the correct data type
+        return numpy.frombuffer(raw_data, dtype=self.dtype)
+
 
     def available(self) -> int:
-        pass
+        return self.chunkSize
 
     def close(self):
+        # leave up to originator to close the stream incase being used else where.
         pass

@@ -4,6 +4,7 @@
 
 # External modules: pyaudio
 
+import argparse
 import math
 import sys
 import struct
@@ -20,9 +21,12 @@ from tkinter import font
 
 import numpy
 
+from audio import source
+from typing import Optional
+
 ############################################################################################################################################
 # Configuration
-DBcoast = 1                 # Database Coast: 0=none; 1=MultiPSK; 2=YADD
+DBcoast = 2                 # Database Coast: 0=none; 1=MultiPSK; 2=YADD
 DBship = 2                  # Database Ship: 0=none; 1=MultiPSK; 2=YADD
 SAMPLErate = 44100          # Sample rate of soundcard, 11025 or 44100 preferred
 FTPtime = 30                # FTP interval time in minutes, integer of 60!!!
@@ -71,10 +75,9 @@ CC = []                     # Country Code list
 FLAGmsgtest = False         # If True then it is a test message!
 FLAGmsgspecial = False      # If True then it is a special message
 FREQext = 0                 # Extra Offset for extended frequency with 10 Hz resolution
-AUDIOdevin = None           # Audio device for input. None = Windows default. Can be modified with the Audio device button.
+AUDIOsrc: Optional[source.AudioSource] = None
 AUDIOsignal1 = []           # Audio trace channel 1
 AUDIObuffer = 0             # Audio buffer size
-PABUFFER = 4180000          # Windows=11520000 No Problem, RASPImax: 4180000 Buffer time: (PABUFFER/samplerate/2)sec (2x8 bits)
 RUNstatus = 0               # 0 stopped, 1 start, 2 running, 3 stop now, 4 stop and restart
 BitOld = "Y"                # The previous bit
 BitNew = "B"                # The new bit 
@@ -231,7 +234,7 @@ def MAINloop():             # The Mainloop
 
 # ================= Select an audio device =======================
 def SELECTaudiodevice():        # Select an audio device
-    global AUDIOdevin
+    global AUDIOsrc
 
     PA = pyaudio.PyAudio()
     ndev = PA.get_device_count()
@@ -249,95 +252,77 @@ def SELECTaudiodevice():        # Select an audio device
         n = n + 1
     PA.terminate()
 
-    AUDIOdevin = None
+    AUDIOsrc = None
     
     s = simpledialog.askstring("Device","Select audio INPUT device:\nPress Cancel for Windows Default\n\n" + ai + "\n\nNumber: ")
+    print(f"Audio Device - s: [{s}]")
     if (s != None):             # If Cancel pressed, then None
         try:                    # Error if for example no numeric characters or OK pressed without input (s = "")
-            v = int(s)
+            v = int(s)            
         except:
             s = "error"
 
         if s != "error":
             if v < 0 or v > ndev:
                 v = 0
-            AUDIOdevin = v
+            AUDIOsrc = source.AlsaAudioSource(v, sampleRate=SAMPLErate)
  
 
 # ======================= Read audio from audio input ==================================
 def AUDIOin():   # Read the audio from the stream and store the data into the arrays
     global DEBUG
-    global PABUFFER
     global AUDIOsignal1
-    global AUDIOdevin
+    global AUDIOsrc
     global RUNstatus
     global SAMPLErate
     global AUDIObuffer
-    global stream
+  
+    if AUDIOsrc:
+    
+        # ... RUNstatus == 1 : Open Stream ...
+        if (RUNstatus == 1):
+            AUDIOsignal1 = []
 
-    PA = pyaudio.PyAudio()
-    FORMAT = pyaudio.paInt16                            # Audio format 16 levels and 2 channels
+            try:
+                
+                AUDIOsrc.open()
 
-    # ... RUNstatus == 1 : Open Stream ...
-    if (RUNstatus == 1):
-        TRACESopened = 1
-        AUDIOsignal1 = []
-
-        try:
-            stream = PA.open(format = FORMAT,
-                channels = TRACESopened, 
-                rate = SAMPLErate, 
-                input = True,
-                output = False,
-                frames_per_buffer = PABUFFER,
-                input_device_index = AUDIOdevin)
-            RUNstatus = 2
-            txt = "Audio Stream opened Sample rate: " + str(SAMPLErate) + " samples/s"
-            PrintInfo(txt)         
-        except:                                         # If error in opening audio stream, show error
-            RUNstatus = 0
-            PrintInfo("Cannot open Audio Stream")
-            txt = " Sample rate: " + str(SAMPLErate) + " not supported\n"
-            messagebox.showerror("Cannot open Audio Stream", txt)
+                RUNstatus = 2
+                txt = "Audio Stream opened Sample rate: " + str(SAMPLErate) + " samples/s"
+                PrintInfo(txt)         
+            except Exception as e:                                         # If error in opening audio stream, show error
+                RUNstatus = 0
+                PrintInfo(f"Cannot open Audio Stream. {e}")
+                txt = " Sample rate: " + str(SAMPLErate) + " not supported\n"
+                messagebox.showerror("Cannot open Audio Stream", txt)
 
 
-    # RUNstatus == 2: Reading audio data from soundcard
-    if RUNstatus == 2:
-        buffervalue = stream.get_read_available()           # Buffer reading testroutine
-        if buffervalue > AUDIObuffer:                       # Set AUDIObuffer size
-            AUDIObuffer = buffervalue
+        # RUNstatus == 2: Reading audio data from soundcard
+        if RUNstatus == 2:
+            buffervalue = AUDIOsrc.available()           # Buffer reading testroutine
+            if buffervalue > AUDIObuffer:                       # Set AUDIObuffer size
+                AUDIObuffer = buffervalue
 
-        try:
-            if buffervalue > 1024:                          # >1024 to avoid problems
-                signals = stream.read(buffervalue)          # Read samples from the buffer
-                # Conversion audio samples to values -32762 to +32767 (ones complement) and add to AUDIOsignal1
-                AUDIOsignal1.extend(numpy.frombuffer(signals, numpy.int16))
-        except:
-            RUNstatus = 4 
-            print(MakeDate(), " Audio buffer reset!")
-            PrintInfo(MakeDate() + " Audio buffer reset!")
-   
-    # ... RUNstatus == 3: Stop; RUNstatus == 4: Stop and restart ...
-    if (RUNstatus == 3) or (RUNstatus == 4):
-        try:
-            stream.stop_stream()
-        except:
-            pass
-        try:
-            stream.close()
-        except:
-            pass
-        try:
-            PA.terminate()
-        except:
-            pass
-        PrintInfo(MakeDate() + " Audio Stream stopped!")
-        if RUNstatus == 3:
-            RUNstatus = 0                                   # Status is stopped 
-        if RUNstatus == 4:
-            RUNstatus = 1                                   # Status is (re)start
+            try:
+                if buffervalue > 1024:                          # >1024 to avoid problems
+                    data = AUDIOsrc.read(buffervalue)
+                    AUDIOsignal1.extend(data)
+            except:
+                RUNstatus = 4 
+                print(MakeDate(), " Audio buffer reset!")
+                PrintInfo(MakeDate() + " Audio buffer reset!")
+    
+        # ... RUNstatus == 3: Stop; RUNstatus == 4: Stop and restart ...
+        if (RUNstatus == 3) or (RUNstatus == 4):
+            AUDIOsrc.close()
+            
+            PrintInfo(MakeDate() + " Audio Stream stopped!")
+            if RUNstatus == 3:
+                RUNstatus = 0                                   # Status is stopped 
+            if RUNstatus == 4:
+                RUNstatus = 1                                   # Status is (re)start
 
-        AUDIOsignal1 = []                                   # Clear audio buffer
+            AUDIOsignal1 = []                                   # Clear audio buffer
         
     root.update_idletasks()
     root.update()
@@ -3114,6 +3099,40 @@ def FillYADDship(dbasename):
     Rfile.close()                       # Close the file
 
     PrintInfo(filename + " data base inputs: " + str(len(SHIPmmsi)))
+
+################################################################################
+# Utilities / Helper Functions
+################################################################################
+
+S16BE = "<" 
+S16LE = ">"
+
+def read_s16(inp_stream, frame_len: int, endianness:str=S16BE):
+    
+    data = inp_stream.read(frame_len * 2)
+    if not data:
+        return []
+    
+    int_list = []
+    idx = 0;
+    while idx < len(data):
+        
+        try:
+            two_bytes = data[idx:idx+2]
+            value = struct.unpack(f'{endianness}h', two_bytes)[0]
+            int_list.append(value)
+            idx += 2
+        except struct.error as e:
+            # Handle cases where incomplete data is read at the end
+            print(f"Warning: Incomplete 16-bit integer detected at end of input. {e}")
+            break
+    return int_list
+
+def read_s16be(inp_stream, frame_len: int):
+    return read_s16(inp_stream, frame_len, S16BE)
+
+def read_s16le(inp_stream, frame_len: int):
+    return read_s16(inp_stream, frame_len, S16LE)
 
 # ================ Start Make Screen ======================================================
 

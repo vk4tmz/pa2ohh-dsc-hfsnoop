@@ -100,3 +100,15 @@ class RawAudioSource(AudioSource):
     def __init__(self, src: io.TextIOWrapper, endianness=S16BE, sampleRate:int=44100):
         super().__init__(sampleRate)
         self.src = src
+
+    def open(self):
+        pass
+    
+    def read(self, frame_size) -> Iterable[int]:
+        pass
+
+    def available(self) -> int:
+        pass
+
+    def close(self):
+        pass

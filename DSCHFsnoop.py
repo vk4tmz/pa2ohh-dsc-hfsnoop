@@ -4,6 +4,7 @@
 
 # External modules: pyaudio
 
+import argparse
 import math
 import sys
 import struct
@@ -20,9 +21,12 @@ from tkinter import font
 
 import numpy
 
+from audio import source
+from typing import Optional
+
 ############################################################################################################################################
 # Configuration
-DBcoast = 1                 # Database Coast: 0=none; 1=MultiPSK; 2=YADD
+DBcoast = 2                 # Database Coast: 0=none; 1=MultiPSK; 2=YADD
 DBship = 2                  # Database Ship: 0=none; 1=MultiPSK; 2=YADD
 SAMPLErate = 44100          # Sample rate of soundcard, 11025 or 44100 preferred
 FTPtime = 30                # FTP interval time in minutes, integer of 60!!!
@@ -71,10 +75,9 @@ CC = []                     # Country Code list
 FLAGmsgtest = False         # If True then it is a test message!
 FLAGmsgspecial = False      # If True then it is a special message
 FREQext = 0                 # Extra Offset for extended frequency with 10 Hz resolution
-AUDIOdevin = None           # Audio device for input. None = Windows default. Can be modified with the Audio device button.
+AUDIOsrc: Optional[source.AudioSource] = None
 AUDIOsignal1 = []           # Audio trace channel 1
 AUDIObuffer = 0             # Audio buffer size
-PABUFFER = 4180000          # Windows=11520000 No Problem, RASPImax: 4180000 Buffer time: (PABUFFER/samplerate/2)sec (2x8 bits)
 RUNstatus = 0               # 0 stopped, 1 start, 2 running, 3 stop now, 4 stop and restart
 BitOld = "Y"                # The previous bit
 BitNew = "B"                # The new bit 
@@ -231,7 +234,7 @@ def MAINloop():             # The Mainloop
 
 # ================= Select an audio device =======================
 def SELECTaudiodevice():        # Select an audio device
-    global AUDIOdevin
+    global AUDIOsrc
 
     PA = pyaudio.PyAudio()
     ndev = PA.get_device_count()
@@ -249,95 +252,77 @@ def SELECTaudiodevice():        # Select an audio device
         n = n + 1
     PA.terminate()
 
-    AUDIOdevin = None
+    AUDIOsrc = None
     
     s = simpledialog.askstring("Device","Select audio INPUT device:\nPress Cancel for Windows Default\n\n" + ai + "\n\nNumber: ")
+    print(f"Audio Device - s: [{s}]")
     if (s != None):             # If Cancel pressed, then None
         try:                    # Error if for example no numeric characters or OK pressed without input (s = "")
-            v = int(s)
+            v = int(s)            
         except:
             s = "error"
 
         if s != "error":
             if v < 0 or v > ndev:
                 v = 0
-            AUDIOdevin = v
+            AUDIOsrc = source.AlsaAudioSource(v, sampleRate=SAMPLErate)
  
 
 # ======================= Read audio from audio input ==================================
 def AUDIOin():   # Read the audio from the stream and store the data into the arrays
     global DEBUG
-    global PABUFFER
     global AUDIOsignal1
-    global AUDIOdevin
+    global AUDIOsrc
     global RUNstatus
     global SAMPLErate
     global AUDIObuffer
-    global stream
+  
+    if AUDIOsrc:
+    
+        # ... RUNstatus == 1 : Open Stream ...
+        if (RUNstatus == 1):
+            AUDIOsignal1 = []
 
-    PA = pyaudio.PyAudio()
-    FORMAT = pyaudio.paInt16                            # Audio format 16 levels and 2 channels
+            try:
+                
+                AUDIOsrc.open()
 
-    # ... RUNstatus == 1 : Open Stream ...
-    if (RUNstatus == 1):
-        TRACESopened = 1
-        AUDIOsignal1 = []
-
-        try:
-            stream = PA.open(format = FORMAT,
-                channels = TRACESopened, 
-                rate = SAMPLErate, 
-                input = True,
-                output = False,
-                frames_per_buffer = PABUFFER,
-                input_device_index = AUDIOdevin)
-            RUNstatus = 2
-            txt = "Audio Stream opened Sample rate: " + str(SAMPLErate) + " samples/s"
-            PrintInfo(txt)         
-        except:                                         # If error in opening audio stream, show error
-            RUNstatus = 0
-            PrintInfo("Cannot open Audio Stream")
-            txt = " Sample rate: " + str(SAMPLErate) + " not supported\n"
-            messagebox.showerror("Cannot open Audio Stream", txt)
+                RUNstatus = 2
+                txt = "Audio Stream opened Sample rate: " + str(SAMPLErate) + " samples/s"
+                PrintInfo(txt)         
+            except Exception as e:                                         # If error in opening audio stream, show error
+                RUNstatus = 0
+                PrintInfo(f"Cannot open Audio Stream. {e}")
+                txt = " Sample rate: " + str(SAMPLErate) + " not supported\n"
+                messagebox.showerror("Cannot open Audio Stream", txt)
 
 
-    # RUNstatus == 2: Reading audio data from soundcard
-    if RUNstatus == 2:
-        buffervalue = stream.get_read_available()           # Buffer reading testroutine
-        if buffervalue > AUDIObuffer:                       # Set AUDIObuffer size
-            AUDIObuffer = buffervalue
+        # RUNstatus == 2: Reading audio data from soundcard
+        if RUNstatus == 2:
+            buffervalue = AUDIOsrc.available()           # Buffer reading testroutine
+            if buffervalue > AUDIObuffer:                       # Set AUDIObuffer size
+                AUDIObuffer = buffervalue
 
-        try:
-            if buffervalue > 1024:                          # >1024 to avoid problems
-                signals = stream.read(buffervalue)          # Read samples from the buffer
-                # Conversion audio samples to values -32762 to +32767 (ones complement) and add to AUDIOsignal1
-                AUDIOsignal1.extend(numpy.frombuffer(signals, numpy.int16))
-        except:
-            RUNstatus = 4 
-            print(MakeDate(), " Audio buffer reset!")
-            PrintInfo(MakeDate() + " Audio buffer reset!")
-   
-    # ... RUNstatus == 3: Stop; RUNstatus == 4: Stop and restart ...
-    if (RUNstatus == 3) or (RUNstatus == 4):
-        try:
-            stream.stop_stream()
-        except:
-            pass
-        try:
-            stream.close()
-        except:
-            pass
-        try:
-            PA.terminate()
-        except:
-            pass
-        PrintInfo(MakeDate() + " Audio Stream stopped!")
-        if RUNstatus == 3:
-            RUNstatus = 0                                   # Status is stopped 
-        if RUNstatus == 4:
-            RUNstatus = 1                                   # Status is (re)start
+            try:
+                if buffervalue >= 1024:                          # >1024 to avoid problems
+                    data = AUDIOsrc.read(buffervalue)
+                    AUDIOsignal1.extend(data)
+            except Exception as e:
+                RUNstatus = 4 
+                print(MakeDate(), f" Audio buffer reset! {e}")
+                PrintInfo(MakeDate() + " Audio buffer reset!")
+    
+        # ... RUNstatus == 3: Stop; RUNstatus == 4: Stop and restart ...
+        if (RUNstatus == 3) or (RUNstatus == 4):
+            AUDIOsrc.close()
+            
+            PrintInfo(MakeDate() + " Audio Stream stopped!")
+            if RUNstatus == 3:
+                RUNstatus = 0                                   # Status is stopped 
+            if RUNstatus == 4:
+                RUNstatus = 1                                   # Status is (re)start
 
-        AUDIOsignal1 = []                                   # Clear audio buffer
+            AUDIOsignal1 = []                                   # Clear audio buffer
         
     root.update_idletasks()
     root.update()
@@ -3117,117 +3102,170 @@ def FillYADDship(dbasename):
 
 # ================ Start Make Screen ======================================================
 
-root=Tk()
-root.title("DSCHFsnoop-v02c.py (16-03-2024): MF-HF-DSC Decoder")
+def initializeUI(freq_hz: int):
+    global root
+    global btnstart
+    global btnscroll
+    global btnsyncf
+    global btninfo
+    global btntest
+    global btnmsg
+    global BTNbgcolor
+    global Bsrate
+    global btnsrate
+    global text1
+    global text2
+    global ca
+    
 
-root.minsize(100, 100)
+    # global RUNstatus
+    # global AUTOscroll
+    # global SYNCF
+    # global DEBUG
+    # global BitY
+    # global BitB
+    # global LOWsearchf
+    # global HIGHsearchf
 
-frame1 = Frame(root, background="blue", borderwidth=5, relief=RIDGE)
-frame1.pack(side=TOP, expand=1, fill=X)
+    root=Tk()
+    root.title(f"MF-HF-DSC Decoder - Monitoring Freq: [{args.freq_hz/1000:.01f}] kHz")
 
-frame1a = Frame(root, background="blue", borderwidth=5, relief=RIDGE)
-frame1a.pack(side=TOP, expand=1, fill=X)
+    root.minsize(100, 100)
 
-frame2 = Frame(root, background="black", borderwidth=5, relief=RIDGE)
-frame2.pack(side=TOP, expand=1, fill=X)
+    frame1 = Frame(root, background="blue", borderwidth=5, relief=RIDGE)
+    frame1.pack(side=TOP, expand=1, fill=X)
 
-scrollbar1 = Scrollbar(frame1)
-scrollbar1.pack(side=RIGHT, expand=NO, fill=BOTH)
+    frame1a = Frame(root, background="blue", borderwidth=5, relief=RIDGE)
+    frame1a.pack(side=TOP, expand=1, fill=X)
 
-text1 = Text(frame1, height=1, width=100, yscrollcommand=scrollbar1.set)
-text1.pack(side=RIGHT, expand=1, fill=BOTH)
+    frame2 = Frame(root, background="black", borderwidth=5, relief=RIDGE)
+    frame2.pack(side=TOP, expand=1, fill=X)
 
-ca = Canvas(frame1, width=(SAx + 2*SAmargin), height=SAy, background="grey")
-ca.pack(side=LEFT)
+    scrollbar1 = Scrollbar(frame1)
+    scrollbar1.pack(side=RIGHT, expand=NO, fill=BOTH)
 
-scrollbar1.config(command=text1.yview)
+    text1 = Text(frame1, height=1, width=100, yscrollcommand=scrollbar1.set)
+    text1.pack(side=RIGHT, expand=1, fill=BOTH)
 
-btnstart = Button(frame1a, text="--", width=ButtonWidth, command=Bstart)
-btnstart.pack(side=LEFT)
+    ca = Canvas(frame1, width=(SAx + 2*SAmargin), height=SAy, background="grey")
+    ca.pack(side=LEFT)
 
-btnsrate = Button(frame1a, text="--", width=ButtonWidth, command=Bsrate)
-btnsrate.pack(side=LEFT)
+    scrollbar1.config(command=text1.yview)
 
-btnsyncf = Button(frame1a, text="--", width=ButtonWidth, command=Bsyncf)
-btnsyncf.pack(side=LEFT)
+    btnstart = Button(frame1a, text="--", width=ButtonWidth, command=Bstart)
+    btnstart.pack(side=LEFT)
 
-btnscroll = Button(frame1a, text="Auto Scroll", width=ButtonWidth, command=Bscroll)
-btnscroll.pack(side=LEFT)
+    btnsrate = Button(frame1a, text="--", width=ButtonWidth, command=Bsrate)
+    btnsrate.pack(side=LEFT)
 
-btninfo = Button(frame1a, text="Clear Info", width=ButtonWidth, command=BCLRinfo)
-btninfo.pack(side=RIGHT)
+    btnsyncf = Button(frame1a, text="--", width=ButtonWidth, command=Bsyncf)
+    btnsyncf.pack(side=LEFT)
 
-BTNbgcolor = btninfo.cget("background")
+    btnscroll = Button(frame1a, text="Auto Scroll", width=ButtonWidth, command=Bscroll)
+    btnscroll.pack(side=LEFT)
 
-btnmsg = Button(frame1a, text="Clear MSGs", width=ButtonWidth, command=BCLRscreen)
-btnmsg.pack(side=RIGHT)
+    btninfo = Button(frame1a, text="Clear Info", width=ButtonWidth, command=BCLRinfo)
+    btninfo.pack(side=RIGHT)
 
-btntest = Button(frame1a, text="Test Mode", width=ButtonWidth, command=Btest)
-btntest.pack(side=RIGHT)
+    BTNbgcolor = btninfo.cget("background")
 
-scrollbar2 = Scrollbar(frame2)
-scrollbar2.pack(side=RIGHT, expand=NO, fill=BOTH)
+    btnmsg = Button(frame1a, text="Clear MSGs", width=ButtonWidth, command=BCLRscreen)
+    btnmsg.pack(side=RIGHT)
 
-text2 = Text(frame2, height=33, width=150, yscrollcommand=scrollbar2.set)
-text2.pack(side=TOP, expand=1, fill=X)
+    btntest = Button(frame1a, text="Test Mode", width=ButtonWidth, command=Btest)
+    btntest.pack(side=RIGHT)
 
-scrollbar2.config(command=text2.yview)
+    scrollbar2 = Scrollbar(frame2)
+    scrollbar2.pack(side=RIGHT, expand=NO, fill=BOTH)
+
+    text2 = Text(frame2, height=33, width=150, yscrollcommand=scrollbar2.set)
+    text2.pack(side=TOP, expand=1, fill=X)
+
+    scrollbar2.config(command=text2.yview)
+
+    root.update()                       # Activate updated screens
+
+    Buttontext()                        # Set colors and text of buttons
+
+    FillCC()                            # Make Country Code List
+
+    if DBcoast == 1:
+        FillMultiPSKcoast("MultiPSKcoast.txt")  # Load the MultiPSKcoast data base
+    if DBcoast == 2:
+        FillYADDcoast("YADDcoast.txt")          # Load the YADDcoast data base
+
+    if DBship == 1:
+        FillMultiPSKship("MultiPSKship.txt")    # Load the MultiPSKship data base
+    if DBship == 2:
+        FillYADDship("YADDship.txt")        # Load the YADDcoast data base
 
 
 # ================ Main routine ================================================
-root.update()                       # Activate updated screens
 
-try:
-    os.mkdir(DIR1)
-except:
-    print(DIR1 + " could not be made or already exists")
-try:
-    os.mkdir(DIR2)
-except:
-    print(DIR2 + " could not be made or already exists")
-try:
-    os.mkdir(DIR3)
-except:
-    print(DIR3 + " could not be made or already exists")
-try:
-    os.mkdir(DIRday)
-except:
-    print(DIRday + " could not be made or already exists")
-try:
-    os.mkdir(DIRcoast)
-except:
-    print(DIRcoast + " could not be made or already exists")
-try:
-    os.mkdir(DIRship)
-except:
-    print(DIRship + " could not be made or already exists")
-try:
-    os.mkdir(DIRpos)
-except:
-    print(DIRpos + " could not be made or already exists")
+def initializeFolders():
+    try:
+        os.mkdir(DIR1)
+    except:
+        print(DIR1 + " could not be made or already exists")
+    try:
+        os.mkdir(DIR2)
+    except:
+        print(DIR2 + " could not be made or already exists")
+    try:
+        os.mkdir(DIR3)
+    except:
+        print(DIR3 + " could not be made or already exists")
+    try:
+        os.mkdir(DIRday)
+    except:
+        print(DIRday + " could not be made or already exists")
+    try:
+        os.mkdir(DIRcoast)
+    except:
+        print(DIRcoast + " could not be made or already exists")
+    try:
+        os.mkdir(DIRship)
+    except:
+        print(DIRship + " could not be made or already exists")
+    try:
+        os.mkdir(DIRpos)
+    except:
+        print(DIRpos + " could not be made or already exists")
 
-Buttontext()                        # Set colors and text of buttons
 
-FillCC()                            # Make Country Code List
 
-if DBcoast == 1:
-    FillMultiPSKcoast("MultiPSKcoast.txt")  # Load the MultiPSKcoast data base
-if DBcoast == 2:
-    FillYADDcoast("YADDcoast.txt")          # Load the YADDcoast data base
+def processArgs(parser):
 
-if DBship == 1:
-    FillMultiPSKship("MultiPSKship.txt")    # Load the MultiPSKship data base
-if DBship == 2:
-    FillYADDship("YADDship.txt")        # Load the YADDcoast data base
+    parser = argparse.ArgumentParser(description="KA9Q-Radio Js8 Decoding Controler.")
+    parser.add_argument("freq_hz", type=int, help="Frequency (Hz) which feed is streaming from.")
+    parser.add_argument("-as", "--audio-src", type=str, default="alsa", choices=["alsa","-"], help="Source for audio feed. Expected s16be format for raw / STDIN feed.")
+    parser.add_argument("-sr", "--sig-rate", type=int, default=44100, choices=[11025, 22050, 44100], help="Audio sample.")
+    parser.add_argument("-l", "--log", type=str, default="./dsc_decode.log", help="Log file.")
+    
+    args = parser.parse_args()
 
-SELECTaudiodevice()                 # Select an audio device
+    return args        
 
-Initialize()                        # Set variables
 
-SetDate()                           # Set the Date for the file savings
+if __name__ == "__main__":
 
-PrintInfo("Press START to start")
+    parser = argparse.ArgumentParser(description="SELCAL Monitoring & Decoding Utility.")
+    args = processArgs(parser)
 
-MAINloop()                          # Start the main  loop
+    initializeFolders()
+    initializeUI(args.freq_hz)
+
+    if (args.audio_src == "alsa"):
+        SELECTaudiodevice()             # Select an audio device
+    elif (args.audio_src == "-"):
+        AUDIOsrc = source.RawAudioSource(src=sys.stdin.buffer)
+
+    Initialize()                        # Set variables
+
+    SetDate()                           # Set the Date for the file savings
+
+    PrintInfo("Press START to start")
+
+    MAINloop()                          # Start the main  loop
 
 

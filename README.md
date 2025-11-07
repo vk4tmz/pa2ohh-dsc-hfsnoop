@@ -71,7 +71,7 @@ wget -O /tmp/GMDSS_2.mp3 https://www.sigidwiki.com/images/f/f8/GMDSS_2.mp3
 wget -O /tmp/GMDSS_3.mp3 https://www.sigidwiki.com/images/7/7c/GMDSS_3.mp3
 ```
 
-### Exampple 1:
+### Example 1:
 ```
 sox /tmp/Dsc_examples.mp3 -t raw -r 44100 -b 16 -c 1 - |  python DSCHFsnoop.py -f 17904000 -as - -sr 44100
 
@@ -102,7 +102,7 @@ EOS-122: Acknowledgement given
 
 ```
 
-### Exampple 2:
+### Example 2:
 
 ```
 sox /tmp/GMDSS_1.mp3 -t raw -r 44100 -b 16 -c 1 - |  python DSCHFsnoop.py 17904000 -as - -sr 44100
@@ -120,14 +120,14 @@ FREQ-TX: NONE
 EOS-117: Acknowledgement required
 ```
 
-### Exampple 3:
+### Example 3:
 
 !!! **Current doesn't decode - Investigating this now.** !!!
 ```
 sox /tmp/GMDSS_2.mp3 -t raw -r 44100 -b 16 -c 1 - |  python DSCHFsnoop.py 17904000 -as - -sr 44100
 ```
 
-### Exampple 4:
+### Example 4:
 
 ```
 sox /tmp/GMDSS_3.mp3 -t raw -r 44100 -b 16 -c 1 - |  python DSCHFsnoop.py 17904000 -as - -sr 44100

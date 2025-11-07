@@ -3237,8 +3237,8 @@ def initializeFolders():
 def processArgs(parser):
 
     parser = argparse.ArgumentParser(description="KA9Q-Radio Js8 Decoding Controler.")
+    parser.add_argument("freq_hz", type=int, help="Frequency (Hz) which feed is streaming from.")
     parser.add_argument("-as", "--audio-src", type=str, default="alsa", choices=["alsa","-"], help="Source for audio feed. Expected s16be format for raw / STDIN feed.")
-    parser.add_argument("-f", "--freq-hz", type=int, default=0, help="Frequency (Hz) which feed is streaming from.")
     parser.add_argument("-sr", "--sig-rate", type=int, default=44100, choices=[11025, 22050, 44100], help="Audio sample.")
     parser.add_argument("-l", "--log", type=str, default="./dsc_decode.log", help="Log file.")
     

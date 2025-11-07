@@ -3254,17 +3254,17 @@ if __name__ == "__main__":
 
     initializeFolders()
     initializeUI(args.freq_hz)
-
-    if (args.audio_src == "alsa"):
-        SELECTaudiodevice()             # Select an audio device
-    elif (args.audio_src == "-"):
-        AUDIOsrc = source.RawAudioSource(src=sys.stdin.buffer)
-
     Initialize()                        # Set variables
 
     SetDate()                           # Set the Date for the file savings
-
-    PrintInfo("Press START to start")
+    
+    if (args.audio_src == "alsa"):
+        SELECTaudiodevice()             # Select an audio device
+        PrintInfo("Press START to start")
+    elif (args.audio_src == "-"):
+        AUDIOsrc = source.RawAudioSource(src=sys.stdin.buffer)
+        # Auto Start Feed
+        Bstart()
 
     MAINloop()                          # Start the main  loop
 

@@ -1,6 +1,8 @@
 
 from utils import makedirs
 
+import pandas as pd
+
 
 class LogFile:
     title:str
@@ -47,6 +49,8 @@ class DscConfig:
     saMargin = 10               # Margin left - right for audio buffer and level of spectrum screen
     buttonWidth = 12            # Width of the buttons
 
+    midsFilename:str            # File contain CSV ofs MMSI (MID and AllocatedTo) data
+    mids:list                   # Lookup list by MID for Country
 
     def __init__(self, dataDir:str, freqRxHz:int, sampleRate:int):
         self.dataDir = dataDir
@@ -67,8 +71,10 @@ class DscConfig:
         self.dirPos =  f"{self.freqDataDir}/DSCpos/"      # Directory for the ship position files
         
         self.ftpFilename = f"{self.freqDataDir}/FTPuploads.txt"
+        self.midsFilename = f"./mmsi_mids.csv"
 
         self.initializeFolders()
+        self.loadMids()
     
 
     def initializeFolders(self):
@@ -76,3 +82,16 @@ class DscConfig:
         makedirs(self.dirCoast);
         makedirs(self.dirShip);
         makedirs(self.dirPos);
+
+    def loadMids(self):
+        # MIDs (Maritime Identification Digits) sourced from "https://www.itu.int/gladapp/Allocation/MIDs"
+        #  - To refresh - Download "xlsx" and convert to CSV
+
+        self.mids = []
+        for n in range(0, 1001):
+            self.mids.append("Unkown")
+
+        df = pd.read_csv(self.midsFilename)
+
+        for index, row in df.iterrows():
+            self.mids[row['Digit']] = row['Allocated to']

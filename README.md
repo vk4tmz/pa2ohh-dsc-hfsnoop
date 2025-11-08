@@ -19,9 +19,9 @@ The Commands syntax / options are:
 
 ```
 $ python DSCHFsnoop.py -h
-usage: DSCHFsnoop.py [-h] [-as {alsa,-}] [-sr {11025,22050,44100}] [-l LOG] freq_hz
+usage: DSCHFsnoop.py [-h] [-as {alsa,-}] [-sr {11025,22050,44100}] [-dd DATA_DIR] freq_hz
 
-KA9Q-Radio Js8 Decoding Controler.
+MF-HF-DSC Decoder
 
 positional arguments:
   freq_hz               Frequency (Hz) which feed is streaming from.
@@ -32,14 +32,14 @@ options:
                         Source for audio feed. Expected s16be format for raw / STDIN feed.
   -sr {11025,22050,44100}, --sig-rate {11025,22050,44100}
                         Audio sample.
-  -l LOG, --log LOG     Log file.
-
+  -dd DATA_DIR, --data-dir DATA_DIR
+                        Root level for data files.
 ```
 
 You need to at minimum specify the **frequency** in Hz. Is is require to ensure when we are running multiple instance we can tell which window is which.  The value for frequency can be any number its currently not being validated.
 
 ```
-python DSCHFsnoop.py 8412800
+python DSCHFsnoop.py 8414500
 ```
 # Audio Source Enhancement
 
@@ -50,12 +50,12 @@ The original tool was 100% UI Driven and the user could only select from the set
 For KA9Q-Radio I run the following commands to monitor all 6 DSC channels via my RX888-mk2 SDR:
 
 ```
-pcmrecord -c -r -f -S 2185 gmdss-pcm.local | python DSCHFsnoop.py 2185000 -as -
-pcmrecord -c -r -f -S 4206 gmdss-pcm.local | python DSCHFsnoop.py 4205800 -as -
-pcmrecord -c -r -f -S 6310 gmdss-pcm.local | python DSCHFsnoop.py 6310300 -as -
-pcmrecord -c -r -f -S 8413 gmdss-pcm.local | python DSCHFsnoop.py 8412800 -as -
-pcmrecord -c -r -f -S 12575 gmdss-pcm.local | python DSCHFsnoop.py 12575300 -as -
-pcmrecord -c -r -f -S 16803 gmdss-pcm.local | python DSCHFsnoop.py 16802800 -as -
+pcmrecord -c -r -f -S 2185 gmdss-pcm.local | python DSCHFsnoop.py 2187500 -as -
+pcmrecord -c -r -f -S 4206 gmdss-pcm.local | python DSCHFsnoop.py 4207400 -as -
+pcmrecord -c -r -f -S 6310 gmdss-pcm.local | python DSCHFsnoop.py 6312000 -as -
+pcmrecord -c -r -f -S 8413 gmdss-pcm.local | python DSCHFsnoop.py 8414500 -as -
+pcmrecord -c -r -f -S 12575 gmdss-pcm.local | python DSCHFsnoop.py 12577000 -as -
+pcmrecord -c -r -f -S 16803 gmdss-pcm.local | python DSCHFsnoop.py 16804500 -as -
 ```
 
 ## Using Sox
@@ -73,7 +73,7 @@ wget -O /tmp/GMDSS_3.mp3 https://www.sigidwiki.com/images/7/7c/GMDSS_3.mp3
 
 ### Example 1:
 ```
-sox /tmp/Dsc_examples.mp3 -t raw -r 44100 -b 16 -c 1 - |  python DSCHFsnoop.py -f 17904000 -as - -sr 44100
+sox /tmp/Dsc_examples.mp3 -t raw -r 44100 -b 16 -c 1 - |  python DSCHFsnoop.py 9999999 -as - -sr 44100
 
 ===================================
 [20251107-07:05:59] 
@@ -105,7 +105,7 @@ EOS-122: Acknowledgement given
 ### Example 2:
 
 ```
-sox /tmp/GMDSS_1.mp3 -t raw -r 44100 -b 16 -c 1 - |  python DSCHFsnoop.py 17904000 -as - -sr 44100
+sox /tmp/GMDSS_1.mp3 -t raw -r 44100 -b 16 -c 1 - |  python DSCHFsnoop.py 9999999 -as - -sr 44100
 
 ===================================
 [20251107-07:07:13] 
@@ -124,13 +124,13 @@ EOS-117: Acknowledgement required
 
 !!! **Current doesn't decode - Investigating this now.** !!!
 ```
-sox /tmp/GMDSS_2.mp3 -t raw -r 44100 -b 16 -c 1 - |  python DSCHFsnoop.py 17904000 -as - -sr 44100
+sox /tmp/GMDSS_2.mp3 -t raw -r 44100 -b 16 -c 1 - |  python DSCHFsnoop.py 9999999 -as - -sr 44100
 ```
 
 ### Example 4:
 
 ```
-sox /tmp/GMDSS_3.mp3 -t raw -r 44100 -b 16 -c 1 - |  python DSCHFsnoop.py 17904000 -as - -sr 44100
+sox /tmp/GMDSS_3.mp3 -t raw -r 44100 -b 16 -c 1 - |  python DSCHFsnoop.py 9999999 -as - -sr 44100
 
 ===================================
 [20251107-07:10:58] 

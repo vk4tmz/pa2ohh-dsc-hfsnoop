@@ -7,10 +7,8 @@
 import argparse
 import math
 import sys
-import struct
 import time
 import pyaudio
-import os
 import shutil
 
 from tkinter import *
@@ -22,34 +20,13 @@ from tkinter import font
 import numpy
 
 from audio import source
+from DSCConfig import DscConfig
 from typing import Optional
 
-############################################################################################################################################
-# Configuration
-DBcoast = 2                 # Database Coast: 0=none; 1=MultiPSK; 2=YADD
-DBship = 2                  # Database Ship: 0=none; 1=MultiPSK; 2=YADD
-SAMPLErate = 44100          # Sample rate of soundcard, 11025 or 44100 preferred
-FTPtime = 30                # FTP interval time in minutes, integer of 60!!!
-TITLE1 = "DSC ALL MESSAGES"             # Title of the file
-FileName1 = "dscall.txt"                # File name for all messages
-DIR1 = "./DSCall/"                      # Directory of the file
-TITLE2 = "DSC WITHOUT TEST MESSAGES"    # Title of the file
-FileName2 = "dscminustest.txt"          # File name for messages except test messages
-DIR2 = "./DSCminustest/"                # Directory of the file
-TITLE3 = "DSC SPECIAL MESSAGES"         # Title of the file
-FileName3 = "dscspecial.txt"            # File name for special messages like for example Distress or a special MMSI
-DIR3 = "./DSCspecial/"                  # Directory of the file
-DIRday = "./DSCday/"        # Directory for the daily files
-DIRcoast = "./DSCcoast/"    # Directory for the mmsi coast station files
-DIRship =  "./DSCship/"     # Directory for the mmsi ship station files
-DIRpos =  "./DSCpos/"       # Directory for the ship position files
-DayOfMonth = False          # If False, Day Of Week is selected for Day Name (0=Sunday) instead of Day Of Month
-FTPfilename = "FTPuploads.txt"
-FREQband = 0                # 0, 1, 2, 3 Frequency band
-SAx = 200                   # Width of the spectrum screen
-SAy = 80                    # Height of the spectrum screen
-SAmargin = 10               # Margin left - right for audio buffer and level of spectrum screen
-ButtonWidth = 12            # Width of the buttons
+
+dscCfg: DscConfig
+
+APPTitle = "MF-HF-DSC Decoder"
 HLINE = "===================================" # Message separation line
 
 ############################################################################################################################################
@@ -153,18 +130,17 @@ def Bstart():
 # ... Button Sample rate ...
 def Bsrate():
     global RUNstatus
-    global SAMPLErate
 
     if RUNstatus != 0:      # Only if stopped
         return
 
-    if SAMPLErate == 44100:
-        SAMPLErate = 11025
+    if dscCfg.sampleRate == 44100:
+        dscCfg.sampleRate = 11025
         Buttontext()        # Set colors and text of buttons
         return
 
-    if SAMPLErate == 11025:
-        SAMPLErate = 44100
+    if dscCfg.sampleRate == 11025:
+        dscCfg.sampleRate = 44100
         Buttontext()        # Set colors and text of buttons
         return
 
@@ -181,11 +157,10 @@ def Bscroll():
 
 #... Button set frequency band for Frequency synchronisation ...
 def Bsyncf():
-    global FREQband
 
-    FREQband = FREQband + 1
+    dscCfg.freqBand = dscCfg.freqBand + 1
 
-    if FREQband > 3:
+    if dscCfg.freqBand > 3:
         FREQband = 0
         
     Initialize()
@@ -223,7 +198,6 @@ def BCLRscreen():
 # =============== The Mainloop =====================
 def MAINloop():             # The Mainloop
     global AUDIOsignal1
-    global SAMPLErate
     global RUNstatus
 
     while(True):
@@ -265,7 +239,7 @@ def SELECTaudiodevice():        # Select an audio device
         if s != "error":
             if v < 0 or v > ndev:
                 v = 0
-            AUDIOsrc = source.AlsaAudioSource(v, sampleRate=SAMPLErate)
+            AUDIOsrc = source.AlsaAudioSource(v, sampleRate=dscCfg.sampleRate)
  
 
 # ======================= Read audio from audio input ==================================
@@ -274,7 +248,6 @@ def AUDIOin():   # Read the audio from the stream and store the data into the ar
     global AUDIOsignal1
     global AUDIOsrc
     global RUNstatus
-    global SAMPLErate
     global AUDIObuffer
   
     if AUDIOsrc:
@@ -288,12 +261,12 @@ def AUDIOin():   # Read the audio from the stream and store the data into the ar
                 AUDIOsrc.open()
 
                 RUNstatus = 2
-                txt = "Audio Stream opened Sample rate: " + str(SAMPLErate) + " samples/s"
+                txt = "Audio Stream opened Sample rate: " + str(dscCfg.sampleRate) + " samples/s"
                 PrintInfo(txt)         
             except Exception as e:                                         # If error in opening audio stream, show error
                 RUNstatus = 0
                 PrintInfo(f"Cannot open Audio Stream. {e}")
-                txt = " Sample rate: " + str(SAMPLErate) + " not supported\n"
+                txt = " Sample rate: " + str(dscCfg.sampleRate) + " not supported\n"
                 messagebox.showerror("Cannot open Audio Stream", txt)
 
 
@@ -332,42 +305,40 @@ def AUDIOin():   # Read the audio from the stream and store the data into the ar
 def Initialize():
     global STARTsample
     global STOPsample
-    global SAMPLErate
     global FFTlength
     global ZEROpadding
     global LOWsearchf
     global HIGHsearchf
     global SHIFTfrequency
     global SHIFTsamples
-    global FREQband
     global BitY
     global BitB
     global BitStep
 
-    if FREQband == 0:
+    if dscCfg.freqBand == 0:
         LOWsearchf = 400
         HIGHsearchf = 2400
 
-    if FREQband == 1:
+    if dscCfg.freqBand == 1:
         LOWsearchf = 1000
         HIGHsearchf = 2000
 
-    if FREQband == 2:
+    if dscCfg.freqBand == 2:
         LOWsearchf = 1200
         HIGHsearchf = 1800
 
-    if FREQband == 3:
+    if dscCfg.freqBand == 3:
         LOWsearchf = 1400
         HIGHsearchf = 2000
 
-    BitStep =  SAMPLErate / BITrate
+    BitStep =  dscCfg.sampleRate / BITrate
     FFTlength = 2**int(math.log2(BitStep * ZEROpadding) + 0.5)
     
-    STARTsample = int(float(LOWsearchf) / (SAMPLErate / (FFTlength - 1)) + 0.5)
-    STOPsample = int(float(HIGHsearchf) / (SAMPLErate / (FFTlength - 1)) + 0.5)
-    SHIFTsamples = int(float(SHIFTfrequency) / (SAMPLErate / (FFTlength - 1)) + 0.5)
+    STARTsample = int(float(LOWsearchf) / (dscCfg.sampleRate / (FFTlength - 1)) + 0.5)
+    STOPsample = int(float(HIGHsearchf) / (dscCfg.sampleRate / (FFTlength - 1)) + 0.5)
+    SHIFTsamples = int(float(SHIFTfrequency) / (dscCfg.sampleRate / (FFTlength - 1)) + 0.5)
 
-    BitY = int(((LOWsearchf + HIGHsearchf - SHIFTfrequency) / 2) / (SAMPLErate / (FFTlength - 1)) - STARTsample + 0.5)
+    BitY = int(((LOWsearchf + HIGHsearchf - SHIFTfrequency) / 2) / (dscCfg.sampleRate / (FFTlength - 1)) - STARTsample + 0.5)
     BitB = BitY + SHIFTsamples
 
     Buttontext()    # Set colors and text of buttons
@@ -520,12 +491,7 @@ def SyncFreq():
 # ============= DrawSpectrum =======================
 def DrawSpectrum():
     global DEBUG
-    global SMPfft
     global AUDIObuffer
-    global PABUFFER
-    global SAx
-    global SAy
-    global SAmargin
     global BitY
     global BitB
     global SYNCTmin
@@ -535,7 +501,7 @@ def DrawSpectrum():
 
     # Spectrum trace
     Tline = []
-    D = 1.2 * numpy.amax(FFTaverage) / SAy      # Find the correction for the maximum
+    D = 1.2 * numpy.amax(FFTaverage) / dscCfg.saY      # Find the correction for the maximum
 
     if D == 0:
         return
@@ -543,46 +509,46 @@ def DrawSpectrum():
     L = len(FFTaverage)
     n = 0
     while n < L:
-        x = SAmargin + n * SAx / (L - 1)
-        if x > (SAx + SAmargin):
-            x = (SAx + SAmargin)
+        x = dscCfg.saMargin + n * dscCfg.saX / (L - 1)
+        if x > (dscCfg.saX + dscCfg.saMargin):
+            x = (dscCfg.saX + dscCfg.saMargin)
         Tline.append(int(x + 0.5))
 
         try:
             y = FFTaverage[n] / D
-            if y > SAy:
-                y = SAy
-            Tline.append(int(SAy - y + 0.5))
+            if y > dscCfg.saY:
+                y = dscCfg.saY
+            Tline.append(int(dscCfg.saY - y + 0.5))
         except:
-            Tline.append(int(SAy / 2))
+            Tline.append(int(dscCfg.saY / 2))
         n = n + 1               
 
     # Y marker
     BYline = []
-    x = int(SAmargin + BitY * SAx / (L - 1) + 0.5) - 1
+    x = int(dscCfg.saMargin + BitY * dscCfg.saX / (L - 1) + 0.5) - 1
     BYline.append(x)
     BYline.append(0)
     BYline.append(x)
-    BYline.append(SAy)
+    BYline.append(dscCfg.saY)
 
     # B marker
     BBline = []
-    x = int(SAmargin + BitB * SAx / (L - 1) + 0.5) - 1
+    x = int(dscCfg.saMargin + BitB * dscCfg.saX / (L - 1) + 0.5) - 1
     BBline.append(x)
     BBline.append(0)
     BBline.append(x)
-    BBline.append(SAy)
+    BBline.append(dscCfg.saY)
 
     # Audio buffer left vertical line
     Aline = []
-    x = SAmargin / 2
+    x = dscCfg.saMargin / 2
     Aline.append(x)
-    Aline.append(SAy)
+    Aline.append(dscCfg.saY)
     Aline.append(x)
-    y = SAy * AUDIObuffer / 4 / SAMPLErate      # 2 sec = 100%! 2 bytes per sample
-    if y > SAy:
-        y = SAy
-    Aline.append(int(SAy - y + 0.5))
+    y = dscCfg.saY * AUDIObuffer / 4 / dscCfg.sampleRate      # 2 sec = 100%! 2 bytes per sample
+    if y > dscCfg.saY:
+        y = dscCfg.saY
+    Aline.append(int(dscCfg.saY - y + 0.5))
     AUDIObuffer = AUDIObuffer * 0.9             # 0.9 instead of zero for smoothing
 
     # Audio level right vertical line
@@ -593,24 +559,24 @@ def DrawSpectrum():
         HI = LO
 
     Lline = []
-    x = SAmargin + SAx + SAmargin / 2 
+    x = dscCfg.saMargin + dscCfg.saX + dscCfg.saMargin / 2 
     Lline.append(x)
-    Lline.append(SAy)
+    Lline.append(dscCfg.saY)
     Lline.append(x)
 
-    y = SAy * HI / 32768                        # 16 bits / 2 is 32768
-    if y > SAy:
-        y = SAy
-    Lline.append(int(SAy - y + 0.5))
+    y = dscCfg.saY * HI / 32768                        # 16 bits / 2 is 32768
+    if y > dscCfg.saY:
+        y = dscCfg.saY
+    Lline.append(int(dscCfg.saY - y + 0.5))
 
     # Synchronisation level bottom
     Sline = []
     if DEBUG == 2 or MSGstatus != 0:
-        x = SAmargin + SAx / 2 + SYNCTmin * SAx / 2
-        y = SAy - SAmargin / 2
+        x = dscCfg.saMargin + dscCfg.saX / 2 + SYNCTmin * dscCfg.saX / 2
+        y = dscCfg.saY - dscCfg.saMargin / 2
         Sline.append(x)
         Sline.append(y)
-        x = SAmargin + SAx / 2 + SYNCTmax * SAx / 2
+        x = dscCfg.saMargin + dscCfg.saX / 2 + SYNCTmax * dscCfg.saX / 2
         Sline.append(x)
         Sline.append(y)
         SYNCTmin = +1.0     # Reset SYNTmin and SYNCTmax
@@ -629,25 +595,25 @@ def DrawSpectrum():
             V = SYNCTcntplus / (SYNCTcntplus + SYNCTcntminus)
         else:                                   # Otherwise set to center = 0.5
             V = 0.5
-        x = V * SAx + SAmargin
-        y = SAy - SAmargin
-        SCline.append(x-SAmargin)
+        x = V * dscCfg.saX + dscCfg.saMargin
+        y = dscCfg.saY - dscCfg.saMargin
+        SCline.append(x-dscCfg.saMargin)
         SCline.append(y)        
-        SCline.append(x+SAmargin)
+        SCline.append(x+dscCfg.saMargin)
         SCline.append(y)
         
     # Marker line
     Mline = []
-    x = SAmargin + SAx / 2
-    y = SAy - SAmargin
+    x = dscCfg.saMargin + dscCfg.saX / 2
+    y = dscCfg.saY - dscCfg.saMargin
     Mline.append(x)
     Mline.append(y)
-    y = SAy
+    y = dscCfg.saY
     Mline.append(x)
     Mline.append(y)
    
     # Delete all items on the Spectrum display
-    de = ca.find_enclosed (-100, -100, SAx+100, SAy+100)    
+    de = ca.find_enclosed (-100, -100, dscCfg.saX+100, dscCfg.saY+100)    
     for n in de: 
         ca.delete(n)
 
@@ -655,29 +621,28 @@ def DrawSpectrum():
     ca.create_line(BYline, fill="red", width=2) # Write the Y marker 
     ca.create_line(BBline, fill="red", width=2) # write the B marker
     
-    if AUDIObuffer / 2 < SAMPLErate:            # 1 second, 2 bytes per sample
-        ca.create_line(Aline, fill="green3", width=int(SAmargin/2))     # Write the Audio buffer line green if < 50%
+    if AUDIObuffer / 2 < dscCfg.sampleRate:            # 1 second, 2 bytes per sample
+        ca.create_line(Aline, fill="green3", width=int(dscCfg.saMargin/2))     # Write the Audio buffer line green if < 50%
     else:
-        ca.create_line(Aline, fill="red", width=int(SAmargin/2))        # Write the Audio buffer line orange if overflow
+        ca.create_line(Aline, fill="red", width=int(dscCfg.saMargin/2))        # Write the Audio buffer line orange if overflow
 
     if HI < 26214:                                                      # 80% of 32768
-        ca.create_line(Lline, fill="green3", width=int(SAmargin/2))     # Write the Audio buffer line green if < 50%
+        ca.create_line(Lline, fill="green3", width=int(dscCfg.saMargin/2))     # Write the Audio buffer line green if < 50%
     else:
-        ca.create_line(Lline, fill="red", width=int(SAmargin/2))        # Write the Audio buffer line orange if overflow
+        ca.create_line(Lline, fill="red", width=int(dscCfg.saMargin/2))        # Write the Audio buffer line orange if overflow
 
     if Sline != []:
-        ca.create_line(Sline, fill="orange", width=int(SAmargin/2))     # Write the Synchronisation line
+        ca.create_line(Sline, fill="orange", width=int(dscCfg.saMargin/2))     # Write the Synchronisation line
         ca.create_line(Mline, fill="white", width=1)                    # Write the little Marker line
 
     if SCline != []:
-        ca.create_line(SCline, fill="yellow", width=int(SAmargin/2))    # Write the counter Synchronisation line
+        ca.create_line(SCline, fill="yellow", width=int(dscCfg.saMargin/2))    # Write the counter Synchronisation line
         
     
 # ============= Convert AUDIOsignal1[] audio data to strYBY =======================
 def MakeYBY():                                  # Read the audio and make strYBY
     global RUNstatus
     global DEBUG
-    global SMPfft
     global strYBY
     global AUDIOsignal1
     global BitStep
@@ -808,11 +773,10 @@ def FINDphasing():
 def SetDate():
     global FileDate
     global FileDay
-    global DayOfMonth
 
     DT = time.gmtime()
     FileDate = time.strftime("%Y%m%d", DT)      # The FileDate
-    if DayOfMonth == True:
+    if dscCfg.dayOfMonth == True:
         FileDay = time.strftime("%d", DT)       # The FileDay of the Month
     else:
         FileDay = time.strftime("%w", DT)       # The FileDay of the Week (0=Sunday)
@@ -823,77 +787,66 @@ def FileHandling():
     global DEBUG
     global FileDate
     global FileDay
-    global DIR1
-    global DIR2
-    global DIR3
-    global DIRday
-    global TITLE1
-    global FileName1
-    global TITLE2
-    global FileName2
-    global TITLE3 
-    global FileName3
     global FileCopy
-    global FTPtime
     global FTPfiles
 
     DT = time.gmtime()
     M = int(time.strftime("%M", DT))    # The minute
 
-    if M % FTPtime == 0 and FileCopy == True:
+    if M % dscCfg.ftpTime == 0 and FileCopy == True:
         FileCopy = False
 
         FTPfiles = []
-        FTPfiles.append(DIRday)         # The FileDay directory for the FTP upload
+        FTPfiles.append(dscCfg.dirDay)         # The FileDay directory for the FTP upload
 
         AUDIOin()                       # Empty audio buffer
         try:
-            F1 = DIR1 + FileDate + FileName1
-            F2 = DIRday + FileDay + FileName1
+            F1 = f"{dscCfg.dscAllLog.dirname}/{FileDate}{dscCfg.dscAllLog.filename}"
+            F2 = f"{dscCfg.dirDay}/{FileDay}{dscCfg.dscAllLog.filename}"
             shutil.copy(F1,F2)
             if DEBUG != 0:
                 PrintInfo("Minute: " + str(M) + "  FileCopy: " + F1 + " = " + F2)
         except:
             Wfile = open(F2,'w')        # Output file
-            Wfile.write(TITLE1 + "\n")
+            Wfile.write(dscCfg.dscAllLog.title + "\n")
             Wfile.close()               # Close the file
 
-        FTPfiles.append(TITLE1)
-        FTPfiles.append(FileDay + FileName1)
+        FTPfiles.append(dscCfg.dscAllLog.title)
+        FTPfiles.append(f"{FileDay}{dscCfg.dscAllLog.filename}")
         
         AUDIOin()                       # Empty audio buffer
         try:
-            F1 = DIR2 + FileDate + FileName2
-            F2 = DIRday + FileDay + FileName2
+            F1 = f"{dscCfg.dscMinusTestLog.dirname}/{FileDate}{dscCfg.dscMinusTestLog.filename}"
+            F2 = f"{dscCfg.dirDay}/{FileDay}{dscCfg.dscMinusTestLog.filename}"
             shutil.copy(F1,F2)
             if DEBUG != 0:
                 PrintInfo("Minute: " + str(M) + "  FileCopy: " + F1 + " = " + F2)
         except:
             Wfile = open(F2,'w')        # Output file
-            Wfile.write(TITLE2 + "\n")
+            Wfile.write(dscCfg.dscMinusTestLog.title + "\n")
             Wfile.close()               # Close the file
 
-        FTPfiles.append(TITLE2)
-        FTPfiles.append(FileDay + FileName2)
+        FTPfiles.append(dscCfg.dscMinusTestLog.title)
+        FTPfiles.append(f"{FileDay}{dscCfg.dscMinusTestLog.filename}")
                     
         AUDIOin()                       # Empty audio buffer
         try:
-            F1 = DIR3 + FileDate + FileName3
-            F2 = DIRday + FileDay + FileName3
+            F1 = f"{dscCfg.dscSpecialMsgLog.dirname}/{FileDate}{dscCfg.dscSpecialMsgLog.filename}"
+            F2 = f"{dscCfg.dirDay}/{FileDay}{dscCfg.dscSpecialMsgLog.filename}"
             shutil.copy(F1,F2)
             if DEBUG != 0:
                 PrintInfo("Minute: " + str(M) + "  FileCopy: " + F1 + " = " + F2)
         except:
             Wfile = open(F2,'w')        # Output file
-            Wfile.write(TITLE3 + "\n")
+            Wfile.write(dscCfg.dscSpecialMsgLog.title + "\n")
             Wfile.close()               # Close the file
             
-        FTPfiles.append(TITLE3)
-        FTPfiles.append(FileDay + FileName3)
+        FTPfiles.append(dscCfg.dscSpecialMsgLog.title)
+        FTPfiles.append(f"{FileDay}{dscCfg.dscSpecialMsgLog.filename}")
 
         FTPupload()
 
-    if M % FTPtime != 0:
+    if M % dscCfg.ftpTime != 0:
         FileCopy = True
 
     SetDate()
@@ -902,9 +855,8 @@ def FileHandling():
 # ============= Saves files to be uploaded by FTP =======================
 def FTPupload():
     global FTPfiles
-    global FTPfilename
 
-    name = FTPfilename
+    name = dscCfg.ftpFilename
     Wfile = open(name,'w')          # Open the file with the files to be uploaded
 
     n = 0
@@ -1867,7 +1819,7 @@ def SAVEpos():
     AUDIOin()   # Empty audio buffer
     try:
         txt = POSmmsi + ";" + MakeDate() + ";" + "LAT" + POSlat + ";" + "LON" + POSlon
-        filename = DIRpos + dt + ".txt"
+        filename = f"{dscCfg.dirPos}/{dt}.txt"
         Wfile = open(filename,'a')
         Wfile.write(txt + "\n")
         Wfile.close()
@@ -2308,12 +2260,6 @@ def PrintInfo(txt):
 def DSCsave():
     global AUTOscroll
     global FileDate
-    global FileName1
-    global FileName2
-    global FileName3
-    global DIR1
-    global DIR2
-    global DIR3 
     global FLAGmsgtest
     global FLAGmsgspecial
     global DSCMSG
@@ -2322,9 +2268,10 @@ def DSCsave():
     if AUTOscroll == True:
         text2.yview(END)
 
+    filename = ""
     AUDIOin()   # Empty audio buffer
     try:
-        filename = DIR1 + FileDate + FileName1
+        filename = f"{dscCfg.dscAllLog.dirname}/{FileDate}{dscCfg.dscAllLog.filename}"
         Wfile = open(filename,'a')          # Output file setting
         Wfile.write(DSCMSG)
         Wfile.close()                       # Close the file
@@ -2334,7 +2281,7 @@ def DSCsave():
     AUDIOin()   # Empty audio buffer
     if FLAGmsgtest == False:
         try:
-            filename = DIR2 + FileDate + FileName2
+            filename = f"{dscCfg.dscMinusTestLog.dirname}/{FileDate}{dscCfg.dscMinusTestLog.filename}"
             Wfile = open(filename,'a')      # Output file setting
             Wfile.write(DSCMSG)
             Wfile.close()                   # Close the file
@@ -2344,7 +2291,7 @@ def DSCsave():
     AUDIOin()   # Empty audio buffer
     if FLAGmsgspecial == True:
         try:        
-            filename = DIR3 + FileDate + FileName3
+            filename = f"{dscCfg.dscSpecialMsgLog.dirname}/{FileDate}{dscCfg.dscSpecialMsgLog.filename}"
             Wfile = open(filename,'a')      # Output file setting
             Wfile.write(DSCMSG)
             Wfile.close()                   # Close the file
@@ -2378,7 +2325,6 @@ def CoastDB(MMSI, Country, AlwaysSave):
     global COASTlon
     global COASTlatd    # Decimal latitude
     global COASTlond    # Decimal longitude
-    global DIRcoast
 
     n = 0
     COASTindex = -1     # No valid value
@@ -2402,7 +2348,7 @@ def CoastDB(MMSI, Country, AlwaysSave):
 
     AUDIOin()   # Empty audio buffer
     try:
-        filename = DIRcoast + MMSI + ".txt"
+        filename = f"{dscCfg.dirCoast}/{MMSI}.txt"
         Rfile = open(filename,'r')          # Input file
         txt = Rfile.readline()              # read the first info line
         n = 0
@@ -2449,7 +2395,6 @@ def ShipDB(MMSI, Country, AlwaysSave):
     # Always save if AlwaysSave == True, if False only if there is a match
     global SHIPindex
     global SHIPinfo
-    global DIRship
 
     n = 0
     SHIPindex = -1     # No valid value
@@ -2472,7 +2417,7 @@ def ShipDB(MMSI, Country, AlwaysSave):
 
     AUDIOin()   # Empty audio buffer
     try:
-        filename = DIRship + MMSI + ".txt"
+        filename = f"{dscCfg.dirShip}/{MMSI}.txt"
         Rfile = open(filename,'r')          # Input file
         txt = Rfile.readline()              # read the first info line
         n = 0
@@ -2553,7 +2498,7 @@ def Buttontext():
     btnsyncf['text'] = txt
 
     btnsrate['background'] = "orange"
-    txt = str(SAMPLErate)
+    txt = str(dscCfg.sampleRate)
     btnsrate['text'] = txt
 
 
@@ -3102,7 +3047,7 @@ def FillYADDship(dbasename):
 
 # ================ Start Make Screen ======================================================
 
-def initializeUI(freq_hz: int):
+def initializeUI(dscCfg:DscConfig):
     global root
     global btnstart
     global btnscroll
@@ -3111,24 +3056,14 @@ def initializeUI(freq_hz: int):
     global btntest
     global btnmsg
     global BTNbgcolor
-    global Bsrate
     global btnsrate
     global text1
     global text2
     global ca
-    
-
-    # global RUNstatus
-    # global AUTOscroll
-    # global SYNCF
-    # global DEBUG
-    # global BitY
-    # global BitB
-    # global LOWsearchf
-    # global HIGHsearchf
+        
 
     root=Tk()
-    root.title(f"MF-HF-DSC Decoder - Monitoring Freq: [{args.freq_hz/1000:.01f}] kHz")
+    root.title(f"{APPTitle} - Monitoring Freq: [{dscCfg.freqRxHz/1000:.01f}] kHz")
 
     root.minsize(100, 100)
 
@@ -3147,32 +3082,32 @@ def initializeUI(freq_hz: int):
     text1 = Text(frame1, height=1, width=100, yscrollcommand=scrollbar1.set)
     text1.pack(side=RIGHT, expand=1, fill=BOTH)
 
-    ca = Canvas(frame1, width=(SAx + 2*SAmargin), height=SAy, background="grey")
+    ca = Canvas(frame1, width=(dscCfg.saX + 2*dscCfg.saMargin), height=dscCfg.saY, background="grey")
     ca.pack(side=LEFT)
 
     scrollbar1.config(command=text1.yview)
 
-    btnstart = Button(frame1a, text="--", width=ButtonWidth, command=Bstart)
+    btnstart = Button(frame1a, text="--", width=dscCfg.buttonWidth, command=Bstart)
     btnstart.pack(side=LEFT)
 
-    btnsrate = Button(frame1a, text="--", width=ButtonWidth, command=Bsrate)
+    btnsrate = Button(frame1a, text="--", width=dscCfg.buttonWidth, command=Bsrate)
     btnsrate.pack(side=LEFT)
 
-    btnsyncf = Button(frame1a, text="--", width=ButtonWidth, command=Bsyncf)
+    btnsyncf = Button(frame1a, text="--", width=dscCfg.buttonWidth, command=Bsyncf)
     btnsyncf.pack(side=LEFT)
 
-    btnscroll = Button(frame1a, text="Auto Scroll", width=ButtonWidth, command=Bscroll)
+    btnscroll = Button(frame1a, text="Auto Scroll", width=dscCfg.buttonWidth, command=Bscroll)
     btnscroll.pack(side=LEFT)
 
-    btninfo = Button(frame1a, text="Clear Info", width=ButtonWidth, command=BCLRinfo)
+    btninfo = Button(frame1a, text="Clear Info", width=dscCfg.buttonWidth, command=BCLRinfo)
     btninfo.pack(side=RIGHT)
 
     BTNbgcolor = btninfo.cget("background")
 
-    btnmsg = Button(frame1a, text="Clear MSGs", width=ButtonWidth, command=BCLRscreen)
+    btnmsg = Button(frame1a, text="Clear MSGs", width=dscCfg.buttonWidth, command=BCLRscreen)
     btnmsg.pack(side=RIGHT)
 
-    btntest = Button(frame1a, text="Test Mode", width=ButtonWidth, command=Btest)
+    btntest = Button(frame1a, text="Test Mode", width=dscCfg.buttonWidth, command=Btest)
     btntest.pack(side=RIGHT)
 
     scrollbar2 = Scrollbar(frame2)
@@ -3189,58 +3124,26 @@ def initializeUI(freq_hz: int):
 
     FillCC()                            # Make Country Code List
 
-    if DBcoast == 1:
+    if dscCfg.dbCoast == 1:
         FillMultiPSKcoast("MultiPSKcoast.txt")  # Load the MultiPSKcoast data base
-    if DBcoast == 2:
+    if dscCfg.dbCoast == 2:
         FillYADDcoast("YADDcoast.txt")          # Load the YADDcoast data base
 
-    if DBship == 1:
+    if dscCfg.dbShip == 1:
         FillMultiPSKship("MultiPSKship.txt")    # Load the MultiPSKship data base
-    if DBship == 2:
+    if dscCfg.dbShip == 2:
         FillYADDship("YADDship.txt")        # Load the YADDcoast data base
 
 
 # ================ Main routine ================================================
 
-def initializeFolders():
-    try:
-        os.mkdir(DIR1)
-    except:
-        print(DIR1 + " could not be made or already exists")
-    try:
-        os.mkdir(DIR2)
-    except:
-        print(DIR2 + " could not be made or already exists")
-    try:
-        os.mkdir(DIR3)
-    except:
-        print(DIR3 + " could not be made or already exists")
-    try:
-        os.mkdir(DIRday)
-    except:
-        print(DIRday + " could not be made or already exists")
-    try:
-        os.mkdir(DIRcoast)
-    except:
-        print(DIRcoast + " could not be made or already exists")
-    try:
-        os.mkdir(DIRship)
-    except:
-        print(DIRship + " could not be made or already exists")
-    try:
-        os.mkdir(DIRpos)
-    except:
-        print(DIRpos + " could not be made or already exists")
-
-
-
 def processArgs(parser):
 
-    parser = argparse.ArgumentParser(description="KA9Q-Radio Js8 Decoding Controler.")
+    parser = argparse.ArgumentParser(description=APPTitle)
     parser.add_argument("freq_hz", type=int, help="Frequency (Hz) which feed is streaming from.")
     parser.add_argument("-as", "--audio-src", type=str, default="alsa", choices=["alsa","-"], help="Source for audio feed. Expected s16be format for raw / STDIN feed.")
     parser.add_argument("-sr", "--sig-rate", type=int, default=44100, choices=[11025, 22050, 44100], help="Audio sample.")
-    parser.add_argument("-l", "--log", type=str, default="./dsc_decode.log", help="Log file.")
+    parser.add_argument("-dd", "--data-dir", type=str, default="./data", help="Root level for data files.")
     
     args = parser.parse_args()
 
@@ -3249,15 +3152,16 @@ def processArgs(parser):
 
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser(description="SELCAL Monitoring & Decoding Utility.")
+    parser = argparse.ArgumentParser(description=APPTitle)
     args = processArgs(parser)
 
-    initializeFolders()
-    initializeUI(args.freq_hz)
+    dscCfg = DscConfig(dataDir=args.data_dir,freqRxHz=args.freq_hz, sampleRate=args.sig_rate)
+
+    initializeUI(dscCfg)
     Initialize()                        # Set variables
 
     SetDate()                           # Set the Date for the file savings
-    
+
     if (args.audio_src == "alsa"):
         SELECTaudiodevice()             # Select an audio device
         PrintInfo("Press START to start")

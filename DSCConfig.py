@@ -85,6 +85,10 @@ class DscConfig:
 
     def loadMids(self):
         # MIDs (Maritime Identification Digits) sourced from "https://www.itu.int/gladapp/Allocation/MIDs"
+        #    The first three digits of the MMSI are known as the Maritime Identification Digits (MID). 
+        #    The MID represents the country of registration of the vessel, or the country in which the DSC shore station 
+        #    is located.
+        #
         #  - To refresh - Download "xlsx" and convert to CSV
 
         self.mids = []

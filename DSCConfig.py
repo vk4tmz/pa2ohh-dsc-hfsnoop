@@ -56,10 +56,13 @@ class DscConfig:
     markSym:str = "Y"
     spaceSym:str = "B"
 
+    ensureFormatSpecifiersSame:bool = False  # ITU Spec - 4.2 Specifiers (112, 116 & 114) should have the value for both Format Specifier message fields.
+
     def __init__(self, dataDir:str, freqRxHz:int, sampleRate:int, invertTones:bool=False):
         self.dataDir = dataDir
         self.freqRxHz = freqRxHz 
         self.sampleRate = sampleRate
+        
         self.invertTones = invertTones
         if (invertTones):
             self.markSym = "B"

@@ -23,11 +23,15 @@ from audio import source
 from DSCConfig import DscConfig
 from typing import Optional
 
+from utils import TENunit,fromTENunit
+
 
 dscCfg: DscConfig
 
 APPTitle = "MF-HF-DSC Decoder"
 HLINE = "===================================" # Message separation line
+FORMAT_SPECIFIERS = [102, 112, 114, 116, 120, 123]  # 
+FORMAT_SPECIFIERS_SAME = [112, 116]            # Distress and All Ships 
 
 ############################################################################################################################################
 # Initialisation of global variables required in various routines (MODIFY THEM ONLY IF NECESSARY!)
@@ -102,6 +106,8 @@ POSmmsi = ""                # MMSI for possible transmitted SHIP position
 POSlat = ""                 # LAT for transmitted SHIP position
 POSlon = ""                 # LON for transmitted SHIP position
 
+
+PHASEDXbits = TENunit(125)
 
 ############################################################################################################################################
 
@@ -709,7 +715,7 @@ def FINDphasing():
 
     # ... Find Phasing ...
 
-    MinBits = 50                            # The search bits in the YBY string
+    MinBits = 100                           # The search bits in the YBY string
     Starti = 100                            # Start to search from this pointer, so that the data before this pointer can also be read
         
     if MSGstatus == 3:                      # Start of new search, skip the old part upto the format specifier
@@ -720,27 +726,48 @@ def FINDphasing():
     while len(strYBY) < (Starti+MinBits+21):   # If too short, call MakeYBY; 20 islength se. +1
         MakeYBY()
     
-    se1 = TENunit(108) + TENunit(125)       # Define search string 1 for phasing
-    se2 = TENunit(107) + TENunit(125)       # Define search string 2 for phasing
+    # Phasing is [125][111], [125][110] .. [125][105]
+    #  Original logic only looked for the match on RX value 108 or 107, which could allow for missed decodes if 
+    #  these bytes were corrupted. We should actually look for any Phase [125] plus a value from between 105 and 111. 
+    #  
+    #   se1 = TENunit(108) + TENunit(125)       # Define search string 1 for phasing
+    #   se2 = TENunit(107) + TENunit(125)       # Define search string 2 for phasing
    
     i = Starti
     L = len(strYBY)
     while i < (L - MinBits):
-        if strYBY[i:(i+20)] == se1:
-            MSG = i - 70
-            MSGstatus = 1
-            if DEBUG > 1:
-                txt = MakeDate()
-                PrintInfo(txt + "SYNC1found: " + str(i))
-            break
+        if strYBY[i:(i+10)] == PHASEDXbits:
+            phaseDxIdxBitsA = strYBY[i+10:(i+20)];     # After DX
+            phaseDxIdxA = fromTENunit(phaseDxIdxBitsA)
+            phaseDxIdxBitsB = strYBY[i-10:i];          # Before DX
+            phaseDxIdxB = fromTENunit(phaseDxIdxBitsB)
+            
+            if (phaseDxIdxA >= 106) and (phaseDxIdxA <= 111):
+                MSG = i - (111-phaseDxIdxA) * 20
+                MSGstatus = 1
+            elif (phaseDxIdxB >= 106) and (phaseDxIdxB <= 111):
+                MSG = i - ((111-phaseDxIdxB+1) * 20)
+                MSGstatus = 1
+            
+            if (MSGstatus == 1):
+                # Compute Counts from computed starting DX Phase 
+                phaseDxCnt = 0;
+                phaseRxSeen = [];
+                for phIdx in range(0, 6): # 106..111
+                    dxi = MSG + (phIdx * 20)
+                    dxVal = strYBY[dxi:(dxi+10)]
+                    rxVal = strYBY[dxi+10:(dxi+20)]
+                    if dxVal == PHASEDXbits:
+                        phaseDxCnt += 1
+                    if rxVal == TENunit(111-phIdx):
+                        phaseRxSeen.append(111-phIdx)
 
-        if strYBY[i:(i+20)] == se2:
-            MSG = i - 90
-            MSGstatus = 1
-            if DEBUG > 1:
                 txt = MakeDate()
-                PrintInfo(txt + "SYNC2found: " + str(i))
-            break
+                print(f"DEBUG: {txt} PhaseDXfound: {i} - DXCnt: [{phaseDxCnt}]  RXSeen: [{phaseRxSeen}]")
+                if DEBUG > 1:
+                    txt = MakeDate()
+                    PrintInfo(f"{txt} PhaseDXfound: {i} - RXB: {phaseDxIdxB}")
+                break           
 
         i = i + 1
 
@@ -894,12 +921,30 @@ def MAKEdata():
     if FS2 < 100:           # If incorrect error check bits (below -1) or not valid (below 100)
         FS2 = GETvalsymbol(20)
     
-    if FS1 != FS2:
+    if not ((FS1 in FORMAT_SPECIFIERS) or (FS2 in FORMAT_SPECIFIERS_SAME)):
         MSGstatus = 3       # Initialize next search as both Format specifiers have to be identical
         if DEBUG != 0:
             txt = MakeDate()
-            PrintInfo(txt + "Format specifiers not identical")
+            PrintInfo(f"{txt} Invalid Format specifiers - FS1: [{FS1}]  FS2: [{FS2}]")
         return()
+
+    # As per ITU DSC Spec:
+    # 4.2 It is considered that receiver decoders must detect the format specifier character twice for
+    #     “distress” alerts and “all ships” calls to effectively eliminate false alerting. For other calls, the
+    #     address characters provide additional protection against false alerting and, therefore, single
+    #     detection of the format specifier character is considered satisfactory (see Table 3).
+    if ((FS1 in FORMAT_SPECIFIERS_SAME) or (FS2 in FORMAT_SPECIFIERS_SAME)):
+        txt = MakeDate()
+        if ((FS1 != FS2) and (dscCfg.ensureFormatSpecifiersSame)):
+            MSGstatus = 3       # Initialize next search as both Format specifiers have to be identical
+            print(f"DEBUG: {txt} Format specifiers not identical - FS1: [{FS1}]  FS2: [{FS2}]")
+            if DEBUG != 0:
+                PrintInfo(f"{txt} Format specifiers not identical - FS1: [{FS1}]  FS2: [{FS2}]")
+            return()
+        else:
+            print(f"DEBUG: {txt} Format specifiers not identical - FS1: [{FS1}]  FS2: [{FS2}] - Continuing")
+            if DEBUG != 0:
+                PrintInfo(f"{txt} Format specifiers not identical - FS1: [{FS1}]  FS2: [{FS2}] - Continuing")
 
     # ... Make the message data and store in MSGdata ...
     Vprevious = -1
@@ -1248,7 +1293,7 @@ def DEC123():
     global FREQext
   
     PrintDSCresult(HLINE)
-    txt = tMakeDate()   # The time
+    txt = MakeDate()   # The time
     PrintDSCresult(txt)
     txt = "FMS-123: Selective individual automatic call"
     PrintDSCresult(txt)
@@ -2092,39 +2137,6 @@ def DSC_EOS(T):
 
 # ======================== Various general routines ========================
 
-# ... Convert a value to a 10 unit string code (ybyby) ...
-def TENunit(Vin):
-    if (Vin > 127):
-         return("ERROR TENunit greater than 127") # ERROR
-    
-    intB = 0
-    intY = 1
-    Vout = ""
-    
-    n = 0
-    while (n < 7):                     # Calculate the first 7 bits, msb(Y=1) first
-        if (int(Vin) & int(intY)) != 0:
-            Vout = Vout + "Y"
-        else:
-            Vout = Vout + "B"            
-            intB = intB + 1            # Counts the number of B's (B=0)
-       
-        intY = intY * 2
-        n = n + 1
-        
-    intY = 4
-    n = 0
-    while (n < 3):                     # Calculate the last 3 bits from intB (the number of "B"s), Msb(Y=1) first
-        if (int(intB) & int(intY)) != 0:
-            Vout = Vout + "Y"
-        else:
-            Vout = Vout + "B"            
-
-        intY = intY / 2
-        n = n + 1
-    
-    return(Vout)
-
 
 # ... Return the value of symbol i (start at 1, only the first 7 bits are used) ...
 def GETvalsymbol(i):
@@ -2139,53 +2151,7 @@ def GETvalsymbol(i):
 
     s = strYBY[n:(n+10)]
 
-    intB = 0
-    v = 0
-    if (s[0] == "Y"):
-        v = v + 1
-    else:
-        intB = intB + 1
-    if (s[1] == "Y"):
-        v = v + 2
-    else:
-        intB = intB + 1
-    if (s[2] == "Y"):
-        v = v + 4
-    else:
-        intB = intB + 1
-    if (s[3] == "Y"):
-        v = v + 8
-    else:
-        intB = intB + 1
-    if (s[4] == "Y"):
-        v = v + 16
-    else:
-        intB = intB + 1
-    if (s[5] == "Y"):
-        v = v + 32
-    else:
-        intB = intB + 1
-    if (s[6] == "Y"):
-        v = v + 64
-    else:
-        intB = intB + 1
-
-    Errchk = ""
-    intY = 4
-    n = 0
-    while (n < 3):                     # Calculate the last 3 bits from intB (the number of "B"s), Msb(Y=1) first
-        if ((int(intB) & int(intY)) != 0):
-            Errchk = Errchk + "Y"
-        else:
-            Errchk = Errchk + "B"            
-
-        intY = intY / 2
-        n = n + 1
-
-    if Errchk != s[7:]:
-        v = -1 * v                      # If Error check bits wrong, return negative value
-
-    return(v)
+    return fromTENunit(s)
 
 
 # ... Try to read from MSGdata[] and return that value or 127 (EOS) if not possible ...

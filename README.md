@@ -122,7 +122,8 @@ EOS-117: Acknowledgement required
 
 ### Example 3:
 
-!!! **Current doesn't decode - Investigating this now.** !!!
+!!! **Fails to decode** !!!
+While investigating why the SigID Wiki GMDSS_2.mp3 example failed to decode, I identified it's tones were reversed (ie possibly recorded using LSB instead of USB). But unfortunately even when I invert the tones and can see we are successfully geting Phase & DX Sync, immediately following all characters seems fail with parity bit test.
 ```
 sox /tmp/GMDSS_2.mp3 -t raw -r 44100 -b 16 -c 1 - |  python DSCHFsnoop.py 9999999 -as - -sr 44100
 ```

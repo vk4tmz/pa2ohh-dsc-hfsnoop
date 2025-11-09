@@ -767,7 +767,26 @@ def FINDphasing():
                 if DEBUG > 1:
                     txt = MakeDate()
                     PrintInfo(f"{txt} PhaseDXfound: {i} - DXCnt: [{phaseDxCnt}]  RXSeen: [{phaseRxSeen}]")
-                break           
+
+                # ITU DSC Spec: 
+                #   3.3 Phasing is considered to be achieved when two DXs and one RX, or two RXs and one DX,
+                #   or three RXs in the appropriate DX or RX positions, respectively, are successfully received. These
+                #   three phasing characters may be detected in either consecutive or non-consecutive positions but in
+                #   both cases all bits of the phasing sequence should be examined for a correct 3-character pattern.
+                #   A call should be rejected only if a correct pattern is not found anywhere within the phasing
+                #   sequence.
+
+                if (((phaseDxCnt >= 2) and (len(phaseRxSeen) >= 1)) or
+                    ((phaseDxCnt >= 1) and (len(phaseRxSeen) >= 2)) or
+                    (len(phaseRxSeen) >= 3)):
+                    # Succesfully achieved Phasing.
+                    break;
+
+                # Insufficient Phasing continuing...
+                MSGstatus = 0
+                txt = MakeDate()
+                print(f"DEBUG: {txt} Insufficient Phasing continuing...")
+                
 
         i = i + 1
 
@@ -914,10 +933,12 @@ def MAKEdata():
     FS2 = -1                # The 2nd format specifier
 
     FS1 = GETvalsymbol(13)
+    FS1rx = GETvalsymbol(14)
     if FS1 < 100:           # If incorrect error check bits (below -1) or not valid (below 100)
         FS1 = GETvalsymbol(18)
 
     FS2 = GETvalsymbol(15)
+    FS2rx = GETvalsymbol(16)
     if FS2 < 100:           # If incorrect error check bits (below -1) or not valid (below 100)
         FS2 = GETvalsymbol(20)
     
@@ -927,6 +948,16 @@ def MAKEdata():
             txt = MakeDate()
             PrintInfo(f"{txt} Invalid Format specifiers - FS1: [{FS1}]  FS2: [{FS2}]")
         return()
+
+    # Checking the last 2 RX values of the Phasing Sequences
+    #  - For now if since we have confirmed a DX Phase then we'll monitor and just warn.
+    #    In Future we may enforce strictness check here.
+    if ((FS1rx != 105) or (FS2rx != 104)):
+        txt = MakeDate()
+        print(f"DEBUG: {txt} Format specifiers Phasing RX aren't as expect - FS1rx: [{FS1rx}]  FS2rx: [{FS2rx}] - Continuing")
+        if DEBUG != 0:
+            PrintInfo(f"{txt} Format specifiers Phasing RX aren't as expect - FS1rx: [{FS1rx}]  FS2rx: [{FS2rx}] - Continuing")
+
 
     # As per ITU DSC Spec:
     # 4.2 It is considered that receiver decoders must detect the format specifier character twice for

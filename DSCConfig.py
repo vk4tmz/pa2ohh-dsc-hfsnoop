@@ -52,10 +52,19 @@ class DscConfig:
     midsFilename:str            # File contain CSV ofs MMSI (MID and AllocatedTo) data
     mids:list                   # Lookup list by MID for Country
 
-    def __init__(self, dataDir:str, freqRxHz:int, sampleRate:int):
+    invertTones:bool
+    markSym:str = "Y"
+    spaceSym:str = "B"
+
+    def __init__(self, dataDir:str, freqRxHz:int, sampleRate:int, invertTones:bool=False):
         self.dataDir = dataDir
         self.freqRxHz = freqRxHz 
         self.sampleRate = sampleRate
+        self.invertTones = invertTones
+        if (invertTones):
+            self.markSym = "B"
+            self.spaceSym = "Y"
+
         self.freqDataDir = f"{self.dataDir}/{self.freqRxHz}"
         
         # log1
@@ -85,6 +94,7 @@ class DscConfig:
 
     def loadMids(self):
         # MIDs (Maritime Identification Digits) sourced from "https://www.itu.int/gladapp/Allocation/MIDs"
+        #
         #    The first three digits of the MMSI are known as the Maritime Identification Digits (MID). 
         #    The MID represents the country of registration of the vessel, or the country in which the DSC shore station 
         #    is located.

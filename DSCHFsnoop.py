@@ -659,12 +659,12 @@ def MakeYBY():                                  # Read the audio and make strYBY
 
         # NIET: V = FFTresult[BitY] - FFTresult[BitB] - (Yref - Bref) / 2
         V = FFTresult[BitY] - FFTresult[BitB]
-        if V > 0:
-            strYBY = strYBY + "Y"               # Add "Y" for  1 for low tone
-            BitNew = "Y"
+        if (V > 0):
+            strYBY = strYBY + dscCfg.markSym               # Add "Y" for  1 for low tone
+            BitNew = dscCfg.markSym
         else:
-            strYBY = strYBY + "B"               # Add "B" for 0 for high tone
-            BitNew = "B"
+            strYBY = strYBY + dscCfg.spaceSym              # Add "B" for 0 for high tone
+            BitNew = dscCfg.spaceSym
             
         SyncFreq()
 
@@ -2838,6 +2838,7 @@ def processArgs(parser):
     parser.add_argument("-as", "--audio-src", type=str, default="alsa", choices=["alsa","-"], help="Source for audio feed. Expected s16be format for raw / STDIN feed.")
     parser.add_argument("-sr", "--sig-rate", type=int, default=44100, choices=[11025, 22050, 44100], help="Audio sample.")
     parser.add_argument("-dd", "--data-dir", type=str, default="./data", help="Root level for data files.")
+    parser.add_argument("-inv", "--invert-tones", action='store_true', help="Invert Marker(Y) / Space(B) Tones.")
     
     args = parser.parse_args()
 
@@ -2849,7 +2850,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=APPTitle)
     args = processArgs(parser)
 
-    dscCfg = DscConfig(dataDir=args.data_dir,freqRxHz=args.freq_hz, sampleRate=args.sig_rate)
+    dscCfg = DscConfig(dataDir=args.data_dir,freqRxHz=args.freq_hz, sampleRate=args.sig_rate, invertTones=args.invert_tones)
 
     initializeUI(dscCfg)
     Initialize()                        # Set variables

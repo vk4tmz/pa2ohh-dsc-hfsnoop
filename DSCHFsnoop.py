@@ -766,7 +766,7 @@ def FINDphasing():
                 print(f"DEBUG: {txt} PhaseDXfound: {i} - DXCnt: [{phaseDxCnt}]  RXSeen: [{phaseRxSeen}]")
                 if DEBUG > 1:
                     txt = MakeDate()
-                    PrintInfo(f"{txt} PhaseDXfound: {i} - RXB: {phaseDxIdxB}")
+                    PrintInfo(f"{txt} PhaseDXfound: {i} - DXCnt: [{phaseDxCnt}]  RXSeen: [{phaseRxSeen}]")
                 break           
 
         i = i + 1

@@ -917,6 +917,63 @@ def FTPupload():
 
        
 # ============= MAKEdata, set the data into MSGdata[]=======================
+def getMessageFrame(i:int, dest:list, errMsg:str):
+    Vprevious = -1
+    L3Berror = False
+    msgData = []
+
+    while(1):                           # Loop until a break occurs
+        V = GETvalsymbol(i)
+        if V < 0:
+            V = GETvalsymbol(i+5)       # If 3 bits error check value incorrect, take the RTX signal 5 symbols later
+        if V >= 0:
+            msgData.append(V)           # If the value has a correct CRC value, add it to the data
+        else:
+            L3Berror = True             # Both the initial and retransmission do have the wrong 3 bits error check value
+            break
+        if Vprevious == 117:            # EOS sign for Acknowledgement required, end of message
+            break
+        if Vprevious == 122:            # EOS sign for Acknowledgement given, end of message
+            break
+        if Vprevious == 127:            # EOS sign for Non acknowledgements, end of message
+            break
+        Vprevious = V                   # Store previous value
+        
+        i = i + 2
+
+    if L3Berror == True:
+        if DEBUG != 0:
+            txt = MakeDate()
+            PrintInfo(f"{txt} {errMsg}")
+        return False
+
+    dest.extend(msgData)
+
+    return True
+
+def frameDataAt(data:list, idx:int):
+    if ((idx < 0) or (idx >= len(data))):
+        return 127                      # Out of range of MSGdata[], return EOS (=127)
+
+    return(data[idx])
+
+def checkFrameECC(data:list, errMsg:str):
+    # ... Check errors with error check character ...
+    ECC = frameDataAt(data, 0) 
+    i = 1
+    while i < (len(data) - 1):
+        ECC = ECC ^ frameDataAt(data, i)
+        i = i + 1
+
+    if frameDataAt(data, len(data)-1) != ECC:  # The last value in the array MSGdata is the Error check symbol
+        if DEBUG != 0:
+            txt = MakeDate()
+            PrintInfo(f"{txt} {errMsg}")
+
+        return False
+    
+    return True
+
 def MAKEdata():
     global DEBUG
     global strYBY
@@ -978,55 +1035,21 @@ def MAKEdata():
                 PrintInfo(f"{txt} Format specifiers not identical - FS1: [{FS1}]  FS2: [{FS2}] - Continuing")
 
     # ... Make the message data and store in MSGdata ...
-    Vprevious = -1
-    L3Berror = False                    # True if the initial and retransmission do have a wrong 3 bits error check value
     MSGdata = []                        # Clear the data
     MSGdata.append(FS1)                 # Append the format specifier
     i = 17                              # The message starts at position 17
-    while(1):                           # Loop until a break occurs
-        V = GETvalsymbol(i)
-        if V < 0:
-            V = GETvalsymbol(i+5)       # If 3 bits error check value incorrect, take the RTX signal 5 symbols later
-        if V >= 0:
-            MSGdata.append(V)           # If the value has a correct CRC value, add it to the data
-        else:
-            L3Berror = True             # Both the initial and retransmission do have the wrong 3 bits error check value
-            break
-        if Vprevious == 117:            # EOS sign for Acknowledgement required, end of message
-            break
-        if Vprevious == 122:            # EOS sign for Acknowledgement given, end of message
-            break
-        if Vprevious == 127:            # EOS sign for Non acknowledgements, end of message
-            break
-        Vprevious = V                   # Store previous value
-        
-        i = i + 2
-
-    STARTEXPMSG = i + 6                 # The possible start of the extension message
-
-    if L3Berror == True:
-        if DEBUG != 0:
-            txt = MakeDate()
-            PrintInfo(txt + "Error Character Check 3 last bits (2x)")
+    if not getMessageFrame(i, MSGdata, "Error Character Check 3 last bits (2x)"):
         MSGstatus = 3                   # Initialize next search as there was an error that could not be corrected
         return()
 
-    # ... Check errors with error check character ...
-    ECC = MSGrdta(0) 
-    i = 1
-    while i < (len(MSGdata) - 1):
-        ECC = ECC ^ MSGrdta(i)
-        i = i + 1
-    if MSGrdta(len(MSGdata)-1) != ECC:  # The last value in the array MSGdata is the Error check symbol
-        if DEBUG != 0:
-            txt = MakeDate()
-            PrintInfo(txt + "Data does not match with Error Check Character")
+    if not checkFrameECC(MSGdata, "Data does not match with Error Check Character"):
         MSGstatus = 3                   # Initialize next search as there was an error in the error check
         return()
 
     MSGstatus = 2                       # Status for decoding the data in MSGdata to a message
  
     # ... Search for extension message ...
+    STARTEXPMSG = i + 6                 # The possible start of the extension message
     V = GETvalsymbol(STARTEXPMSG)
 
     NOEXPmessage = False                # True if no expansion message 
@@ -1037,51 +1060,18 @@ def MAKEdata():
         return()
 
     # ... Start to fill the EXPMSGdata ....
-    Vprevious = -1
     EXPMSGdata = []                     # Clear the EXPMSGdata[] array
-    L3Berror = False                    # True if the initial and retransmission do have a wrong 3 bits error check value
     i = STARTEXPMSG                     # The possible extension message starts at this position
-    while(1):                           # Loop until a break occurs
-        V = GETvalsymbol(i)
-            
-        if V < 0:
-            V = GETvalsymbol(i+5)       # If 3 bits error check value incorrect, take the RTX signal 5 symbols later
-           
-        if V >= 0:
-            EXPMSGdata.append(V)        # If the value has a correct CRC value, add it to the data
-        else:
-            L3Berror = True             # Both the initial and retransmission do have the wrong 3 bits error check value
-            break
 
-        if Vprevious == 117:            # EOS sign for Acknowledgement required, end of message
-            break
-        if Vprevious == 122:            # EOS sign for Acknowledgement given, end of message
-            break
-        if Vprevious == 127:            # EOS sign for Non acknowledgements, end of message
-            break
-        Vprevious = V                   # Store previous value
-        
-        i = i + 2
-    
-    if L3Berror == True:
-        if DEBUG != 0:
-            txt = MakeDate()
-            PrintInfo(txt + "Error expansion msg, Error Character Check 3 last bits (2x)")
+    if not getMessageFrame(i, EXPMSGdata, "Error expansion msg, Error Character Check 3 last bits (2x)"):
         EXPMSGdata = []                 # Clear the EXPMSGdata
         return()
 
-    # ... Check errors with error check character ...
-    ECC = EXPMSGrdta(0) 
-    i = 1
-    while i < (len(EXPMSGdata) - 1):
-        ECC = ECC ^ EXPMSGrdta(i)
-        i = i + 1
-    if EXPMSGrdta(len(EXPMSGdata)-1) != ECC:  # The last value in the array EXPMSGdata is the Error check symbol
-        if DEBUG != 0:
-            txt = MakeDate()
-            PrintInfo(txt + "Data expansion msg does not match with Error Check Character")
+    if not checkFrameECC(EXPMSGdata, "Data expansion msg does not match with Error Check Character"):
         EXPMSGdata = []
         return()
+
+
     
 # ============================ Select the decoder depending on the Format specifier ==============================
 def SELECTdecoder():

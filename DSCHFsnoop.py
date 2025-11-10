@@ -29,9 +29,10 @@ from utils import TENunit,fromTENunit
 dscCfg: DscConfig
 
 APPTitle = "MF-HF-DSC Decoder"
-HLINE = "===================================" # Message separation line
+HLINE = "==================================="       # Message separation line
 FORMAT_SPECIFIERS = [102, 112, 114, 116, 120, 123]  # 
-FORMAT_SPECIFIERS_SAME = [112, 116]            # Distress and All Ships 
+FORMAT_SPECIFIERS_SAME = [112, 116]                 # Distress and All Ships 
+DXRX_PHASING_BIT_LEN = 120                          # (6xDX + 6xRX)x10
 
 ############################################################################################################################################
 # Initialisation of global variables required in various routines (MODIFY THEM ONLY IF NECESSARY!)
@@ -715,15 +716,15 @@ def FINDphasing():
 
     # ... Find Phasing ...
 
-    MinBits = 100                           # The search bits in the YBY string
-    Starti = 100                            # Start to search from this pointer, so that the data before this pointer can also be read
+    MinBits = 30                            # The search bits in the YBY string  30 bits enough to confirm possible (RX, DX, RX )
+    Starti = 0                              # Start to search from this pointer, so that the data before this pointer can also be read
         
-    if MSGstatus == 3:                      # Start of new search, skip the old part upto the format specifier
-        strYBY = strYBY[(MSG+120-Starti):]  # Ready for next search of phasing signal of 120 bits
-        FFTaverage = FFTresult              # Reset FFTaverage for new search
-        MSGstatus = 0                       # And set the status to search
+    if MSGstatus == 3:                                # Start of new search, skip the old part upto the format specifier
+        strYBY = strYBY[(MSG+DXRX_PHASING_BIT_LEN):]  # Discard last Phasing Sequence. Ready for next search of phasing signal of 120 bits
+        FFTaverage = FFTresult                        # Reset FFTaverage for new search
+        MSGstatus = 0                                 # And set the status to search
 
-    while len(strYBY) < (Starti+MinBits+21):   # If too short, call MakeYBY; 20 islength se. +1
+    while len(strYBY) < MinBits:            # If too short, call MakeYBY;
         MakeYBY()
     
     # Phasing is [125][111], [125][110] .. [125][105]
@@ -737,24 +738,40 @@ def FINDphasing():
     L = len(strYBY)
     while i < (L - MinBits):
         if strYBY[i:(i+10)] == PHASEDXbits:
-            phaseDxIdxBitsA = strYBY[i+10:(i+20)];     # After DX
+            phaseDxIdxBitsA = strYBY[i+10:(i+20)];     # RX After DX
             phaseDxIdxA = fromTENunit(phaseDxIdxBitsA)
-            phaseDxIdxBitsB = strYBY[i-10:i];          # Before DX
+            phaseDxIdxBitsB = strYBY[i-10:i];          # RX Before DX
             phaseDxIdxB = fromTENunit(phaseDxIdxBitsB)
             
+            foundPossiblePhasing = False
             if (phaseDxIdxA >= 106) and (phaseDxIdxA <= 111):
-                MSG = i - (111-phaseDxIdxA) * 20
-                MSGstatus = 1
+                phaseDxStartIdx = i - (111-phaseDxIdxA) * 20
+                foundPossiblePhasing = True
             elif (phaseDxIdxB >= 106) and (phaseDxIdxB <= 111):
-                MSG = i - ((111-phaseDxIdxB+1) * 20)
-                MSGstatus = 1
+                phaseDxStartIdx = i - ((111-phaseDxIdxB+1) * 20)
+                foundPossiblePhasing = True
             
-            if (MSGstatus == 1):
-                # Compute Counts from computed starting DX Phase 
+            if (foundPossiblePhasing):
+
+                # Check if we need to prepad strYBY so Computed MSG starts at a first DX Phasing sequence
+                padLen = 0
+                if (phaseDxStartIdx < 0):
+                    padLen = abs(phaseDxStartIdx)
+                    print(f"DEBUG: Pre-padding strYBY with {abs(phaseDxStartIdx)} Y's....")
+                    i += padLen                        # ensure to shift i by the size of padding
+                    pad = "Y" * abs(phaseDxStartIdx)
+                    strYBY = pad + strYBY
+                    phaseDxStartIdx = 0
+                    
+                # Ensure we have 120 bits (6xDX + 6xRX) to ensure us to perform out Counts
+                while len(strYBY) < (DXRX_PHASING_BIT_LEN):          # If too short, call MakeYBY;
+                    MakeYBY()
+
+                # Compute Counts of Valid DX and RX values from computed starting DX Phase 
                 phaseDxCnt = 0;
                 phaseRxSeen = [];
                 for phIdx in range(0, 6): # 106..111
-                    dxi = MSG + (phIdx * 20)
+                    dxi = phaseDxStartIdx + (phIdx * 20)
                     dxVal = strYBY[dxi:(dxi+10)]
                     rxVal = strYBY[dxi+10:(dxi+20)]
                     if dxVal == PHASEDXbits:
@@ -779,14 +796,19 @@ def FINDphasing():
                 if (((phaseDxCnt >= 2) and (len(phaseRxSeen) >= 1)) or
                     ((phaseDxCnt >= 1) and (len(phaseRxSeen) >= 2)) or
                     (len(phaseRxSeen) >= 3)):
+
                     # Succesfully achieved Phasing.
+                    MSG = phaseDxStartIdx
+                    MSGstatus = 1
                     break;
 
                 # Insufficient Phasing continuing...
                 MSGstatus = 0
                 txt = MakeDate()
                 print(f"DEBUG: {txt} Insufficient Phasing continuing...")
-                
+
+                # Clean up - remove any pre-padding
+                strYBY = strYBY[padLen:]
 
         i = i + 1
 

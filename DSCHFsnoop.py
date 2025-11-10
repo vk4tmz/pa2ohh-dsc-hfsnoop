@@ -445,7 +445,7 @@ def SyncTime():
     try:
         V = (VB - VY) / (VB + VY)
     except:
-        V = 0,0         # Solve division by zero errors
+        V = 0.0         # Solve division by zero errors
 
     if V > SYNCTmax:    # For the display, orange sync line
         SYNCTmax = V

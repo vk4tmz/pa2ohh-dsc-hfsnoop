@@ -167,7 +167,7 @@ def Bsyncf():
     dscCfg.freqBand = dscCfg.freqBand + 1
 
     if dscCfg.freqBand > 3:
-        FREQband = 0
+        dscCfg.freqBand = 0
         
     Initialize()
 

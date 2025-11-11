@@ -22,6 +22,7 @@ import numpy
 from audio import source
 from db.CoastDB import CoastDB
 from db.ShipDB import ShipDB
+from db.MidsDB import MidsDB
 from DSCConfig import DscConfig
 from typing import Optional
 
@@ -30,6 +31,7 @@ from utils import TENunit,fromTENunit
 dscCfg: DscConfig
 coastDB: CoastDB
 shipDB: ShipDB
+midsDB: MidsDB
 
 APPTitle = "MF-HF-DSC Decoder"
 HLINE = "==================================="       # Message separation line
@@ -1665,23 +1667,23 @@ def DSC_MMSI(P, SelfID):
 
     if CallSign[0:1] != "0":                            # INDIVIDUAL
         x = int(CallSign[0:3])
-        TXT = TXT + CallSign[0:9] + " INDIVIDUAL CC" + CallSign[0:3]+ " [" + dscCfg.mids[x] + "]"
+        TXT = TXT + CallSign[0:9] + " INDIVIDUAL CC" + CallSign[0:3]+ " [" + midsDB.lookup(x) + "]"
 
         if SelfID == True:                          # Self ID station that transmits if True
-            coastDB.lookup(CallSign[0:9], dscCfg.mids[x], False)    # Might be a Coast station with a "normal" MMSI in the COAST Data base
+            COASTindex = coastDB.lookup(CallSign[0:9], midsDB.lookup(x), False)    # Might be a Coast station with a "normal" MMSI in the COAST Data base
             if COASTindex == -1:                    # No match in the COAST data base
-                shipDB.lookup(CallSign[0:9], dscCfg.mids[x], True)  # Is a "normal" ship MMSI, perhaps in the SHIP data base, Always save
+                SHIPindex = shipDB.lookup(CallSign[0:9], midsDB.lookup(x), True)  # Is a "normal" ship MMSI, perhaps in the SHIP data base, Always save
                 POSmmsi = CallSign[0:9]             # Callsign for possible position saving
     
     if CallSign[0:1] == "0" and CallSign[1:2] != "0":   # GROUP
         x = int(CallSign[1:4])
-        TXT = TXT + CallSign[0:9] + " GROUP CC" + CallSign[1:4] + " [" + dscCfg.mids[x] + "]"
+        TXT = TXT + CallSign[0:9] + " GROUP CC" + CallSign[1:4] + " [" + midsDB.lookup(x) + "]"
      
     if CallSign[0:1] == "0" and CallSign[1:2] == "0":   # COAST
         x = int(CallSign[2:5])
-        TXT = TXT + CallSign[0:9] + " COAST CC" + CallSign[2:5] + " [" + dscCfg.mids[x] + "]"
+        TXT = TXT + CallSign[0:9] + " COAST CC" + CallSign[2:5] + " [" + midsDB.lookup(x) + "]"
         if SelfID == True:                          # Self ID station that transmits if True
-            coastDB.lookup(CallSign[0:9], dscCfg.mids[x], True)     # Check the COAST data base and True=ALWAYS save
+            COASTindex = coastDB.lookup(CallSign[0:9], midsDB.lookup(x), True)     # Check the COAST data base and True=ALWAYS save
             if COASTindex == -1:                    # NOT a match!
                 PrintInfo("Unknown Coast station: " + CallSign[0:9])
 
@@ -2366,9 +2368,11 @@ def Buttontext():
 def loadDatabases():
     global coastDB
     global shipDB
+    global midsDB
     
     coastDB = CoastDB(dscCfg)
     shipDB = ShipDB(dscCfg)
+    midsDB = MidsDB(dscCfg)
 
 def initializeUI(dscCfg:DscConfig):
     global root

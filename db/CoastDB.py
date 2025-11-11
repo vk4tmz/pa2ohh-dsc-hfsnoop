@@ -29,7 +29,7 @@ class CoastDB:
         else:
             raise Exception(f"Invalid CoastDB Type: [{self.dscCfg.dbCoast}]")
 
-    def lookup(self, MMSI, Country, AlwaysSave):
+    def lookup(self, MMSI, Country, AlwaysSave) -> int:
         # Always save if AlwaysSave == True, if False only if there is a match
         
         n = 0
@@ -43,8 +43,14 @@ class CoastDB:
             n = n + 1
 
         if AlwaysSave == False and COASTindex == -1: # No save if no match 
-            return
+            return COASTindex
 
+        self.updateCoastStats(COASTindex, MMSI, Country)
+
+        return COASTindex
+
+
+    def updateCoastStats(self, COASTindex:int, MMSI:str, Country:str):
         # Simple Search for an UNordered short database    
         MM = []
         n = 0
@@ -91,7 +97,7 @@ class CoastDB:
             Wfile.write(self.COASTname[COASTindex] + "\n")
             Wfile.write(self.COASTlatd[COASTindex] + "\n")
             Wfile.write(self.COASTlond[COASTindex] + "\n")
-        Wfile.close()   
+        Wfile.close()
 
 
     # ... Fill the YADD coast data base ...
@@ -165,11 +171,11 @@ class CoastDB:
                 self.COASTname.append(Vinfo)
                 # print("["+Vmmsi+"]["+Vlat+"]["+str(Vlatd)+"]["+Vlon+"]["+str(Vlond)+"]["+Vinfo+"]")
             except:
-                self.log.error(f"COAST data base error line: {line}")
+                self.log.error(f"COAST database error line: {line}")
 
         Rfile.close()                       # Close the file
 
-        self.log.info(f"{filename} data base inputs: {len(self.COASTmmsi)} - Without position: {nopos}")
+        self.log.info(f"{filename} database inputs: {len(self.COASTmmsi)} - Without position: {nopos}")
 
 
 
@@ -223,8 +229,8 @@ class CoastDB:
                 self.COASTname.append(Vinfo)
                 # print("["+Vmmsi+"]["+Vlat+"]["+str(Vlatd)+"]["+Vlon+"]["+str(Vlond)+"]["+Vinfo+"]")
             except:
-                self.log.error(f"COAST data base error line: {line}")
+                self.log.error(f"COAST database error line: {line}")
 
         Rfile.close()                       # Close the file
 
-        self.log.info(f"{filename} data base inputs: {len(self.COASTmmsi)} - Without position: {nopos}")
+        self.log.info(f"{filename} database inputs: {len(self.COASTmmsi)} - Without position: {nopos}")

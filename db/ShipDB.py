@@ -28,24 +28,27 @@ class ShipDB:
 
 
     # ... Check Ship data base and save the files ... 
-    def lookup(self, MMSI, Country, AlwaysSave):
+    def lookup(self, MMSI, Country, AlwaysSave) -> int:
         # Always save if AlwaysSave == True, if False only if there is a match
-        global SHIPindex
-        global SHIPinfo
 
         n = 0
         SHIPindex = -1     # No valid value
         m = int(MMSI)
-        while n < len(SHIPmmsi):
-            mm =  int(SHIPmmsi[n])
+        while n < len(self.SHIPmmsi):
+            mm =  int(self.SHIPmmsi[n])
             if m == mm:
                 SHIPindex = n
                 break
             n = n + 1
         
         if AlwaysSave == False and SHIPindex == -1: # No save if no match 
-            return
+            return SHIPindex
         
+        self.updateShipStats(SHIPindex, MMSI, Country)
+        
+        return SHIPindex
+
+    def updateShipStats(self, SHIPindex, MMSI, Country):
         MM = []
         n = 0
         while n < 12:
@@ -86,18 +89,17 @@ class ShipDB:
             Wfile.write("No information" + "\n")
         else:
             Wfile.write(Country + "\n")
-            Wfile.write(SHIPinfo[SHIPindex] + "\n")
+            Wfile.write(self.SHIPinfo[SHIPindex] + "\n")
         Wfile.close()
+
 
     # ... Fill the YADD ship data base ...
     def fillYADDship(self):
-        global SHIPmmsi
-        global SHIPinfo
 
         filename = self.dscCfg.yaddShipDB_fn
 
-        SHIPmmsi = []
-        SHIPinfo = []
+        self.SHIPmmsi = []
+        self.SHIPinfo = []
 
         try:
             Rfile = open(filename,'r', encoding='utf-8', errors='ignore') # Input file
@@ -120,24 +122,21 @@ class ShipDB:
 
                 Vinfo = txt[10:-1]          # -1 to delete the LF or CR    
 
-                SHIPmmsi.append(Vmmsi)
-                SHIPinfo.append(Vinfo)
+                self.SHIPmmsi.append(Vmmsi)
+                self.SHIPinfo.append(Vinfo)
                 # print("["+Vmmsi+"]["+Vinfo+"]")
             except:
-                self.log.error(f"SHIP data base error line: {line}")
+                self.log.error(f"SHIP database error line: {line}")
             
         Rfile.close()                       # Close the file
 
-        self.log.info(f"{filename} data base inputs: {len(SHIPmmsi)}")
+        self.log.info(f"{filename} database inputs: {len(self.SHIPmmsi)}")
 
 
     # ... Fill the MuliPSK ship data base ...
     def fillMultiPSKship(self):
     
         filename = self.dscCfg.multiPSKShipDB_fn
-
-        SHIPmmsi = []
-        SHIPinfo = []
 
         try:
             # Rfile = open(filename,'r', encoding='utf-8', errors='ignore') # Input file
@@ -160,12 +159,12 @@ class ShipDB:
 
                 Vinfo = txt[10:-1]          # -1 to delete the LF or CR    
 
-                SHIPmmsi.append(Vmmsi)
-                SHIPinfo.append(Vinfo)
+                self.SHIPmmsi.append(Vmmsi)
+                self.SHIPinfo.append(Vinfo)
                 # print("["+Vmmsi+"]["+Vinfo+"]")
             except:
-                self.log.error(f"SHIP data base error line: {line}")
+                self.log.error(f"SHIPdata base error line: {line}")
 
         Rfile.close()                       # Close the file
 
-        self.log.info(f"{filename} data base inputs: {len(SHIPmmsi)}")
+        self.log.info(f"{filename} database inputs: {len(self.SHIPmmsi)}")

@@ -2,7 +2,6 @@
 from utils import makedirs
 
 import logging
-import pandas as pd
 
 
 class LogFile:
@@ -53,7 +52,6 @@ class DscConfig:
     buttonWidth = 12            # Width of the buttons
 
     midsFilename:str            # File contain CSV ofs MMSI (MID and AllocatedTo) data
-    mids:list                   # Lookup list by MID for Country
 
     invertTones:bool
     markSym:str = "Y"
@@ -96,7 +94,6 @@ class DscConfig:
         self.midsFilename = f"./mmsi_mids.csv"
 
         self.initializeFolders()
-        self.loadMids()
     
 
     def initializeFolders(self):
@@ -104,21 +101,3 @@ class DscConfig:
         makedirs(self.dirCoast);
         makedirs(self.dirShip);
         makedirs(self.dirPos);
-
-    def loadMids(self):
-        # MIDs (Maritime Identification Digits) sourced from "https://www.itu.int/gladapp/Allocation/MIDs"
-        #
-        #    The first three digits of the MMSI are known as the Maritime Identification Digits (MID). 
-        #    The MID represents the country of registration of the vessel, or the country in which the DSC shore station 
-        #    is located.
-        #
-        #  - To refresh - Download "xlsx" and convert to CSV
-
-        self.mids = []
-        for n in range(0, 1001):
-            self.mids.append("Unkown")
-
-        df = pd.read_csv(self.midsFilename)
-
-        for index, row in df.iterrows():
-            self.mids[row['Digit']] = row['Allocated to']

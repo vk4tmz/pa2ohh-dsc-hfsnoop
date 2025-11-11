@@ -1,6 +1,7 @@
 
 from utils import makedirs
 
+import logging
 import pandas as pd
 
 
@@ -20,6 +21,8 @@ class LogFile:
 
 
 class DscConfig:
+
+    log: logging.Logger
 
     ############################################################################################################################################
     # Configuration
@@ -56,9 +59,16 @@ class DscConfig:
     markSym:str = "Y"
     spaceSym:str = "B"
 
+    multiPSKCoastDB_fn = "./MultiPSKcoast.txt"
+    multiPSKShipDB_fn = "./MultiPSKship.txt"
+
+    yaddCoastDB_fn = "./YADDcoast.txt"
+    yaddShipDB_fn = "./YADDship.txt"
+
     ensureFormatSpecifiersSame:bool = False  # ITU Spec - 4.2 Specifiers (112, 116 & 114) should have the value for both Format Specifier message fields.
 
     def __init__(self, dataDir:str, freqRxHz:int, sampleRate:int, invertTones:bool=False):
+        self.log = logging.getLogger("%s.%s" % (__name__, self.__class__.__name__))
         self.dataDir = dataDir
         self.freqRxHz = freqRxHz 
         self.sampleRate = sampleRate

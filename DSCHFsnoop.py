@@ -20,13 +20,16 @@ from tkinter import font
 import numpy
 
 from audio import source
+from db.CoastDB import CoastDB
+from db.ShipDB import ShipDB
 from DSCConfig import DscConfig
 from typing import Optional
 
 from utils import TENunit,fromTENunit
 
-
 dscCfg: DscConfig
+coastDB: CoastDB
+shipDB: ShipDB
 
 APPTitle = "MF-HF-DSC Decoder"
 HLINE = "==================================="       # Message separation line
@@ -91,16 +94,7 @@ BitB = 0                    # B is high tone sample in FFT array
 BitStep = 0.0               # The audio samples of one Bit
 BitStepFrac = 0.0           # Fractional part in calculation
 
-COASTmmsi = []              # MMSI in Coast data base
-COASTname = []
-COASTlat = []
-COASTlon = []
-COASTlatd = []              # Decimal latitude
-COASTlond = []              # Decimal longitude
 COASTindex = -1             # The match index, but -1 if no match
-
-SHIPmmsi = []               # MMSI in Ship data base 
-SHIPinfo = []
 SHIPindex = -1              # The match index, but -1 if no match
 
 POSmmsi = ""                # MMSI for possible transmitted SHIP position
@@ -1642,11 +1636,8 @@ def DSC_MMSI(P, SelfID):
     # MMSI address
     global DEBUG
     global MSGdata
-    global CC
-    global COASTmmsi
-    global COASTname
-    global COASTlat
-    global COASTlon
+    global coastDB
+    global shipDB
     global COASTindex
     global SHIPindex
     global POSmmsi
@@ -1677,9 +1668,9 @@ def DSC_MMSI(P, SelfID):
         TXT = TXT + CallSign[0:9] + " INDIVIDUAL CC" + CallSign[0:3]+ " [" + dscCfg.mids[x] + "]"
 
         if SelfID == True:                          # Self ID station that transmits if True
-            CoastDB(CallSign[0:9], dscCfg.mids[x], False)    # Might be a Coast station with a "normal" MMSI in the COAST Data base
+            coastDB.lookup(CallSign[0:9], dscCfg.mids[x], False)    # Might be a Coast station with a "normal" MMSI in the COAST Data base
             if COASTindex == -1:                    # No match in the COAST data base
-                ShipDB(CallSign[0:9], dscCfg.mids[x], True)  # Is a "normal" ship MMSI, perhaps in the SHIP data base, Always save
+                shipDB.lookup(CallSign[0:9], dscCfg.mids[x], True)  # Is a "normal" ship MMSI, perhaps in the SHIP data base, Always save
                 POSmmsi = CallSign[0:9]             # Callsign for possible position saving
     
     if CallSign[0:1] == "0" and CallSign[1:2] != "0":   # GROUP
@@ -1690,16 +1681,16 @@ def DSC_MMSI(P, SelfID):
         x = int(CallSign[2:5])
         TXT = TXT + CallSign[0:9] + " COAST CC" + CallSign[2:5] + " [" + dscCfg.mids[x] + "]"
         if SelfID == True:                          # Self ID station that transmits if True
-            CoastDB(CallSign[0:9], dscCfg.mids[x], True)     # Check the COAST data base and True=ALWAYS save
+            coastDB.lookup(CallSign[0:9], dscCfg.mids[x], True)     # Check the COAST data base and True=ALWAYS save
             if COASTindex == -1:                    # NOT a match!
                 PrintInfo("Unknown Coast station: " + CallSign[0:9])
 
     if COASTindex != -1:                            # A match in the COAST data base
         # TXT = TXT + "\nINFO-DB: [" + COASTmmsi[COASTindex] + " " + COASTlat[COASTindex] + " " + COASTlon[COASTindex] + " " + COASTname[COASTindex] + "]"     
-        TXT = TXT + "\nINFO-DB: [" + COASTname[COASTindex] + " " + COASTlat[COASTindex] + " " + COASTlon[COASTindex] + "]"
+        TXT = TXT + "\nINFO-DB: [" + coastDB.COASTname[COASTindex] + " " + coastDB.COASTlat[COASTindex] + " " + coastDB.COASTlon[COASTindex] + "]"
     if SHIPindex != -1:
         # TXT = TXT + "\nINFO-DB: [" + SHIPmmsi[SHIPindex] + " " + SHIPinfo[SHIPindex] + "]"     
-        TXT = TXT + "\nINFO-DB: [" + SHIPinfo[SHIPindex] + "]"
+        TXT = TXT + "\nINFO-DB: [" + shipDB.SHIPinfo[SHIPindex] + "]"
     return(TXT)
   
             
@@ -2323,146 +2314,6 @@ def SPECIAL():
     btninfo['background'] = "red"
 
 
-# ... Check Coast station data base and save the files ... 
-def CoastDB(MMSI, Country, AlwaysSave):
-    # Always save if AlwaysSave == True, if False only if there is a match
-    global COASTindex   # Index number if a match
-    global COASTmmsi    # MMSI in Coast data base
-    global COASTname
-    global COASTlat
-    global COASTlon
-    global COASTlatd    # Decimal latitude
-    global COASTlond    # Decimal longitude
-
-    n = 0
-    COASTindex = -1     # No valid value
-    m = int(MMSI)
-    while n < len(COASTmmsi):
-        mm = int(COASTmmsi[n])
-        if m == mm:
-            COASTindex = n
-            break
-        n = n + 1
-
-    if AlwaysSave == False and COASTindex == -1: # No save if no match 
-        return
-
-    # Simple Search for an UNordered short database    
-    MM = []
-    n = 0
-    while n < 12:
-        MM.append(0)
-        n = n + 1
-
-    AUDIOin()   # Empty audio buffer
-    try:
-        filename = f"{dscCfg.dirCoast}/{MMSI}.txt"
-        Rfile = open(filename,'r')          # Input file
-        txt = Rfile.readline()              # read the first info line
-        n = 0
-        while n < 12:
-            txt = Rfile.readline()          # read 12 month values
-            MM[n] = int(txt)
-            n = n + 1
-        Rfile.close()
-    except:
-        pass 
-
-    DT = time.gmtime()
-
-    TheMonth = time.strftime("%m", DT)      # The FileDay of the Month
-    M = int(TheMonth) - 1                   # Convert to 0 - 11
-    MM[M] = MM[M] + 1
-
-    AUDIOin()   # Empty audio buffer
-    Wfile = open(filename,'w')
-    txt = MMSI + "  " + MakeDate()          # Write first line
-    Wfile.write(txt + "\n")
-
-    n = 0
-    while n < 12:
-        txt = str(MM[n])                    # Write 12 month values
-        Wfile.write(txt + "\n")
-        n = n + 1
-
-    if COASTindex == -1:
-        Wfile.write(Country + "\n")
-        Wfile.write("Unknown name" + "\n")
-        Wfile.write("0.0" + "\n")
-        Wfile.write("0.0" + "\n")
-    else:
-        Wfile.write(Country + "\n")
-        Wfile.write(COASTname[COASTindex] + "\n")
-        Wfile.write(COASTlatd[COASTindex] + "\n")
-        Wfile.write(COASTlond[COASTindex] + "\n")
-    Wfile.close()   
-
-
-# ... Check Ship data base and save the files ... 
-def ShipDB(MMSI, Country, AlwaysSave):
-    # Always save if AlwaysSave == True, if False only if there is a match
-    global SHIPindex
-    global SHIPinfo
-
-    n = 0
-    SHIPindex = -1     # No valid value
-    m = int(MMSI)
-    while n < len(SHIPmmsi):
-        mm =  int(SHIPmmsi[n])
-        if m == mm:
-            SHIPindex = n
-            break
-        n = n + 1
-    
-    if AlwaysSave == False and SHIPindex == -1: # No save if no match 
-        return
-    
-    MM = []
-    n = 0
-    while n < 12:
-        MM.append(0)
-        n = n + 1
-
-    AUDIOin()   # Empty audio buffer
-    try:
-        filename = f"{dscCfg.dirShip}/{MMSI}.txt"
-        Rfile = open(filename,'r')          # Input file
-        txt = Rfile.readline()              # read the first info line
-        n = 0
-        while n < 12:
-            txt = Rfile.readline()          # read 12 month values
-            MM[n] = int(txt)
-            n = n + 1
-        Rfile.close()
-    except:
-        pass 
-
-    DT = time.gmtime()
-
-    TheMonth = time.strftime("%m", DT)      # The FileDay of the Month
-    M = int(TheMonth) - 1                   # Convert to 0 - 11
-    MM[M] = MM[M] + 1
-
-    AUDIOin()   # Empty audio buffer
-    Wfile = open(filename,'w')
-    txt = MMSI + "  " + MakeDate()          # Write first line
-    Wfile.write(txt + "\n")
-
-    n = 0
-    while n < 12:
-        txt = str(MM[n])                    # Write 12 month values
-        Wfile.write(txt + "\n")
-        n = n + 1
-
-    if SHIPindex == -1:
-        Wfile.write(Country + "\n")
-        Wfile.write("No information" + "\n")
-    else:
-        Wfile.write(Country + "\n")
-        Wfile.write(SHIPinfo[SHIPindex] + "\n")
-    Wfile.close()   
-
-
 # ... Make button text and colors ...
 def Buttontext():
     global btnstart
@@ -2510,247 +2361,14 @@ def Buttontext():
     btnsrate['text'] = txt
 
 
-# ... Fill the MMSI MuliPSK coast data base ...
-def FillMultiPSKcoast(dbasename):
-    global COASTmmsi
-    global COASTname
-    global COASTlatd
-    global COASTlond
-    global COASTlat
-    global COASTlon
-
-    COASTmmsi = []
-    COASTname = []
-    COASTlatd = []
-    COASTlond = []
-    COASTlat = []
-    COASTlon = []
-
-    try:
-        filename = "./" + dbasename
-        # Rfile = open(ilename,'r', encoding='utf-8', errors='ignore') # Input file
-        Rfile = open(filename,'r') # Input file
-    except:
-        PrintInfo("No COAST database [" + filename + "]")
-        return
-
-    nopos = 0 
-    line = 0  
-    while(True):
-        line = line + 1
-        txt = Rfile.readline()          # Read the next line
-        if txt == "":                   # Till empty = end
-            Rfile.close()               # Close the file
-            break                       # And exit the while loop
-
-        try:
-            Vmmsi = txt[0:9]
-            s = int(Vmmsi)              # Check for integer number
-        
-            Vlat = txt[10:12] + "." + txt[13:15] + txt[16]
-
-            Vlatd = int(txt[10:12]) + round(int(txt[13:15])/60,3)
-            if txt[16] == "S":
-                Vlatd = -1 * Vlatd
-
-            Vlon = txt[18:21] + "." + txt[22:24] + txt[25]
-
-            Vlond = int(txt[18:21]) + round(int(txt[22:24])/60,3)
-            if txt[25] == "W":
-                Vlond = -1 * Vlond
-
-            if Vlatd == 0.0 and Vlond == 0.0:
-                nopos = nopos + 1
-
-            Vinfo = txt[27:-1]          # -1 to delete the LF or CR
-        
-            COASTmmsi.append(Vmmsi)
-            COASTlat.append(Vlat)
-            COASTlatd.append(str(Vlatd))            
-            COASTlon.append(Vlon)
-            COASTlond.append(str(Vlond))
-            COASTname.append(Vinfo)
-            # print("["+Vmmsi+"]["+Vlat+"]["+str(Vlatd)+"]["+Vlon+"]["+str(Vlond)+"]["+Vinfo+"]")
-        except:
-            PrintInfo("COAST data base error line: " + str(line))
-
-    Rfile.close()                       # Close the file
-
-    PrintInfo(filename + " data base inputs: " + str(len(COASTmmsi)) + " - Without position: " + str(nopos))
-
-
-# ... Fill the MuliPSK ship data base ...
-def FillMultiPSKship(dbasename):
-    global SHIPmmsi
-    global SHIPinfo
-
-    SHIPmmsi = []
-    SHIPinfo = []
-
-    try:
-        filename = "./" + dbasename
-        # Rfile = open(filename,'r', encoding='utf-8', errors='ignore') # Input file
-        Rfile = open(filename,'r') # Input file
-    except:
-        PrintInfo("No SHIP database [" + filename + "]")
-        return
-        
-    line = 0  
-    while(True):
-        line = line + 1
-        txt = Rfile.readline()          # Read the next line
-        if txt == "":                   # Till empty = end
-            Rfile.close()               # Close the file
-            break                       # And exit the while loop
-
-        try:
-            Vmmsi = txt[0:9]
-            s = int(Vmmsi)              # Check for integer number
-
-            Vinfo = txt[10:-1]          # -1 to delete the LF or CR    
-
-            SHIPmmsi.append(Vmmsi)
-            SHIPinfo.append(Vinfo)
-            # print("["+Vmmsi+"]["+Vinfo+"]")
-        except:
-            PrintInfo("SHIP data base error line: " + str(line))
-
-    Rfile.close()                       # Close the file
-
-    PrintInfo(filename + " data base inputs: " + str(len(SHIPmmsi)))
-
-
-# ... Fill the YADD coast data base ...
-def FillYADDcoast(dbasename):
-    global COASTmmsi
-    global COASTname
-    global COASTlatd
-    global COASTlond
-    global COASTlat
-    global COASTlon
-
-    COASTmmsi = []
-    COASTname = []
-    COASTlatd = []
-    COASTlond = []
-    COASTlat = []
-    COASTlon = []
-
-    try:
-        filename = "./" + dbasename
-        Rfile = open(filename,'r', encoding='utf-8', errors='ignore') # Input file
-        # Rfile = open(filename,'r') # Input file
-    except:
-        PrintInfo("No COAST database [" + filename + "]")
-        return
-                  
-    line = 0
-    nopos = 0 
-    while(True):
-        line = line + 1
-        txt = Rfile.readline()          # Read the next line
-        if txt == "":                   # Till empty = end
-            Rfile.close()               # Close the file
-            break                       # And exit the while loop
-
-        try:
-            L = txt.split(",")          # Split comma separated
-            
-            Vmmsi = L[0]
-            s = int(Vmmsi)              # Check for integer number
-        
-            Vlatd = round(float(L[3]),3)
-            Vlond = round(float(L[4]),3)
-
-            if Vlatd == 0.0 and Vlond == 0.0:
-                nopos = nopos + 1
-
-            # Calculate Vlat
-            if Vlatd < 0:
-                C = "S"             # North
-                V = -1 * Vlatd
-            else:
-                C = "N"             # South
-                V = Vlatd
-                
-            s1 = str(int(V + 100))
-            s1 = s1[1:]                         # Remove the "1"
-            s2 = str(int(60 * (V % 1) + 0.5) + 100)
-            s2 = s2[1:]                         # Remove the "1"            
-            Vlat = s1 + "." + s2 + C
-
-            # Calculate Vlon
-            if Vlond < 0:
-                C = "W"             # West
-                V = -1 * Vlond
-            else:
-                C = "E"             # East
-                V = Vlond
-
-            s1 = str(int(V + 1000))
-            s1 = s1[1:]                         # Remove the "1"
-            s2 = str(int(60 * (V % 1) + 0.5) + 100)
-            s2 = s2[1:]                         # Remove the "1"            
-            Vlon = s1 + "." + s2 + C
-
-            Vinfo = L[2]
-        
-            COASTmmsi.append(Vmmsi)
-            COASTlat.append(Vlat)
-            COASTlatd.append(str(Vlatd))            
-            COASTlon.append(Vlon)
-            COASTlond.append(str(Vlond))
-            COASTname.append(Vinfo)
-            # print("["+Vmmsi+"]["+Vlat+"]["+str(Vlatd)+"]["+Vlon+"]["+str(Vlond)+"]["+Vinfo+"]")
-        except:
-            PrintInfo("COAST data base error line: " + str(line))
-
-    Rfile.close()                       # Close the file
-
-    PrintInfo(filename + " data base inputs: " + str(len(COASTmmsi)) + " - Without position: " + str(nopos))
-
-
-# ... Fill the MuliPSK ship data base ...
-def FillYADDship(dbasename):
-    global SHIPmmsi
-    global SHIPinfo
-
-    SHIPmmsi = []
-    SHIPinfo = []
-
-    try:
-        filename = "./" + dbasename
-        Rfile = open(filename,'r', encoding='utf-8', errors='ignore') # Input file
-        # Rfile = open(filename,'r') # Input file
-    except:
-        PrintInfo("No SHIP database [" + filename + "]")
-        return
-        
-    line = 0  
-    while(True):
-        line = line + 1
-        txt = Rfile.readline()          # Read the next line
-        if txt == "":                   # Till empty = end
-            Rfile.close()               # Close the file
-            break                       # And exit the while loop
-
-        try:
-            Vmmsi = txt[0:9]
-            s = int(Vmmsi)              # Check for integer number
-
-            Vinfo = txt[10:-1]          # -1 to delete the LF or CR    
-
-            SHIPmmsi.append(Vmmsi)
-            SHIPinfo.append(Vinfo)
-            # print("["+Vmmsi+"]["+Vinfo+"]")
-        except:
-            PrintInfo("SHIP data base error line: " + str(line))
-        
-    Rfile.close()                       # Close the file
-
-    PrintInfo(filename + " data base inputs: " + str(len(SHIPmmsi)))
-
 # ================ Start Make Screen ======================================================
+
+def loadDatabases():
+    global coastDB
+    global shipDB
+    
+    coastDB = CoastDB(dscCfg)
+    shipDB = ShipDB(dscCfg)
 
 def initializeUI(dscCfg:DscConfig):
     global root
@@ -2827,16 +2445,7 @@ def initializeUI(dscCfg:DscConfig):
 
     Buttontext()                        # Set colors and text of buttons
 
-    if dscCfg.dbCoast == 1:
-        FillMultiPSKcoast("MultiPSKcoast.txt")  # Load the MultiPSKcoast data base
-    if dscCfg.dbCoast == 2:
-        FillYADDcoast("YADDcoast.txt")          # Load the YADDcoast data base
-
-    if dscCfg.dbShip == 1:
-        FillMultiPSKship("MultiPSKship.txt")    # Load the MultiPSKship data base
-    if dscCfg.dbShip == 2:
-        FillYADDship("YADDship.txt")        # Load the YADDcoast data base
-
+    loadDatabases()
 
 # ================ Main routine ================================================
 

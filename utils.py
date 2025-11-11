@@ -1,5 +1,6 @@
 
 import os
+import time
 
 ####################################################################
 # Common Utility / Helper Functions - to be moved/refactored later
@@ -11,6 +12,8 @@ def makedirs(dirname:str):
     except OSError as e:
         print(f"Error creating [{dirname}]. {e}")
 
+def getTimeStamp():
+    return time.strftime("%Y%m%d-%H:%M:%S", time.gmtime())
 
 ####################################################################
 # DSC Specific Utility / Helper Functions - to be moved/refactored later

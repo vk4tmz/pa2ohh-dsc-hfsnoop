@@ -7,6 +7,7 @@ import threading
 
 sys.path.insert(0, '..')
 
+from utils import TENunit, fromTENunit
 from audio.source import AudioSource, RawAudioSource
 from collections import deque
 from time import sleep
@@ -360,6 +361,17 @@ class FSKDecoder:
     def removeBits(self, length:int):
         for n in range(0, length):
             self.strYBY.popleft()
+
+    # ... Return the value of symbol i (start at 1, only the first 7 bits are used) ...
+    def getValSymbol(self, startOfs:int, symIdx:int):
+
+        n = startOfs + (symIdx-1)*10        # msg is start position in strYBY of message
+        if n < 0:                           # If out of range of strYBY then return -1
+            return(-1)
+        
+        s = self.getBits(n, 10)
+
+        return fromTENunit(s)
     
     def setLockFreq(self, isLocked:bool):
         self.isLockFreq = isLocked

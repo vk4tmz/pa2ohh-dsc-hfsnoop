@@ -1,7 +1,10 @@
 
 import io
 import numpy
+import numpy.typing as npt
+
 import pyaudio
+import select
 
 from abc import ABCMeta, abstractmethod
 from typing import Iterable, BinaryIO
@@ -26,7 +29,7 @@ class AudioSource(metaclass=ABCMeta):
         pass
     
     @abstractmethod 
-    def read(self, frame_size) -> Iterable[int]:
+    def read(self, frame_size) -> npt.NDArray[numpy.int16]:
         pass
 
     @abstractmethod 
@@ -70,7 +73,7 @@ class AlsaAudioSource(AudioSource):
                 input_device_index = self.srcId)
         
     
-    def read(self, buffervalue) -> Iterable[int]:
+    def read(self, buffervalue) -> npt.NDArray[numpy.int16]:
         signals = self.stream.read(buffervalue)          # Read samples from the buffer
         # Conversion audio samples to values -32762 to +32767 (ones complement) and add to AUDIOsignal1
         return numpy.frombuffer(signals, numpy.int16)
@@ -99,7 +102,7 @@ class AlsaAudioSource(AudioSource):
 class RawAudioSource(AudioSource):
     src: BinaryIO
     dtype:str
-    chunkSize: int
+    readTimeout:float = 1.0
 
     
     def __init__(self, src: BinaryIO, dtype:str='int16', sampleRate:int=44100, numChannels:int=1):
@@ -110,12 +113,14 @@ class RawAudioSource(AudioSource):
     def open(self):
         pass
     
-    def read(self, frame_size) -> Iterable[int]:
-        raw_data = self.src.read(frame_size * numpy.dtype(self.dtype).itemsize * self.numChannels)
+    def read(self, frame_size) -> npt.NDArray[numpy.int16]:
+        raw_data = None
+
+        if select.select([self.src,],[],[],self.readTimeout)[0]:
+            raw_data = self.src.read(frame_size * numpy.dtype(self.dtype).itemsize * self.numChannels)
 
         if not raw_data:
-            # End of input
-            return iter([])
+            return numpy.empty(0, dtype=self.dtype)
 
         # Convert raw bytes to a NumPy array with the correct data type
         return numpy.frombuffer(raw_data, dtype=self.dtype)

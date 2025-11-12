@@ -3,11 +3,16 @@ import sys
 from time import sleep
 
 sys.path.insert(0, '..')
+sys.path.insert(0, '.')
 
 from utils import TENunit, fromTENunit
 from audio.source import AudioSource, RawAudioSource
-from FSKDecoder import FSKDecoder, LM_AUTO, LM_MANUAL
-from DSCMessageFactory import DSCMessageFactory
+from decoder.FSKDecoder import FSKDecoder, LM_AUTO, LM_MANUAL
+from decoder.DSCMessageFactory import DSCMessageFactory
+
+from DSCConfig import DscConfig
+from db.DSCDatabases import DscDatabases
+
 
 SHIFTfrequency = 170        # 170 for MF - HF
 BITrate = 100.0             # Bitrate 100 for MF - HF
@@ -25,13 +30,17 @@ logging.basicConfig(level=logging.DEBUG)
 class DSCDecoder:
 
     dec: FSKDecoder
+    dscCfg: DscConfig
+    dscDB: DscDatabases
     msgFactory: DSCMessageFactory
     log: logging.Logger
 
-    def __init__(self, audioSrc:AudioSource, lockMode:str="A", centerFreq:int=1700, tonesInverted:bool=False):
+    def __init__(self, audioSrc:AudioSource, dscCfg: DscConfig, lockMode:str="A", centerFreq:int=1700, tonesInverted:bool=False):
         self.log = logging.getLogger("%s.%s" % (__name__, self.__class__.__name__))
+
+        self.dscDB = DscDatabases(dscCfg)
         self.dec = FSKDecoder(audioSrc=audioSrc, shiftFreq=SHIFTfrequency, bitRate=BITrate, lockMode=lockMode,centerFreq=centerFreq, tonesInverted=tonesInverted)
-        self.msgFactory = DSCMessageFactory(dec=self.dec)
+        self.msgFactory = DSCMessageFactory(dec=self.dec, dscDB=self.dscDB)
 
     def startDecoder(self):
         # TODO: Thread this
@@ -185,9 +194,10 @@ class DSCDecoder:
 
 def main():
     audioSrc = RawAudioSource(src=sys.stdin.buffer, sampleRate=44100)
+    dscCfg = DscConfig(dataDir="./data", freqRxHz=999999, sampleRate=44100)
 
     #dec = DSCDecoder(audioSrc, lockMode=LM_MANUAL, centerFreq=1700)
-    dec = DSCDecoder(audioSrc, lockMode=LM_AUTO)
+    dec = DSCDecoder(audioSrc, dscCfg, lockMode=LM_AUTO)
     dec.startDecoder()
 
     # print(f"DEBUG: Remaining strYBY - Len: [{len(self.dec.strYBY)}] - Data: [{"".join(self.dec.strYBY)}]")

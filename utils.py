@@ -19,6 +19,24 @@ def getTimeStamp():
 # DSC Specific Utility / Helper Functions - to be moved/refactored later
 ####################################################################
 
+def getMsgPaddedVals(data, idx, length):
+    txt = ""
+    for N in range(idx,idx+length):
+        v = getMsgVal(data, N)
+        if v  < 10:
+            txt += "0" 
+        txt += str(v).strip()    
+    
+    return txt
+
+# ... Try to read from msgData[] and return that value or 127 (EOS) if not possible ...
+def getMsgVal(data, i):
+    try:
+        v = data[i]
+    except:
+        v = 127                         # Out of range of msgData[], return EOS (=127)
+    return(v)
+
 # ... Convert a value to a 10 unit string code (ybyby) ...
 def TENunit(Vin):
     if (Vin > 127):

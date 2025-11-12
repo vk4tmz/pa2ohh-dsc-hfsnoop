@@ -2,6 +2,9 @@
 import logging
 
 from FSKDecoder import FSKDecoder
+from utils import getMsgVal
+from DSCMessage import DscMessage, DscSelectiveGeographicAreaMsg
+from db.DSCDatabases import DscDatabases
 
 FORMAT_SPECIFIERS = [102, 112, 114, 116, 120, 123]  # 
 FORMAT_SPECIFIERS_SAME = [112, 116]                 # Distress and All Ships 
@@ -10,14 +13,16 @@ DEBUG = 0
 
 class DSCMessageFactory:
 
+    dscDB : DscDatabases
     dec: FSKDecoder
     log: logging.Logger
 
     ensureFormatSpecifiersSame: bool = False
 
-    def __init__(self, dec: FSKDecoder):
+    def __init__(self, dec: FSKDecoder, dscDB : DscDatabases):
         self.log = logging.getLogger("%s.%s" % (__name__, self.__class__.__name__))
         self.dec = dec
+        self.dscDB = dscDB
 
 
     def getValSymbol(self, idx):
@@ -146,38 +151,32 @@ class DSCMessageFactory:
 
     # ============================ Select the decoder depending on the Format specifier ==============================
 
-    # ... Try to read from msgData[] and return that value or 127 (EOS) if not possible ...
-    def getMsgVal(self, msgData, i):
-        try:
-            v = msgData[i]
-        except:
-            v = 127                         # Out of range of msgData[], return EOS (=127)
-        return(v)
-
-    def selectMessageDecoder(self, msgData, expMsgData):
+    def selectMessageDecoder(self, msgData, expMsgData) -> DscMessage | None:
         
-        self.log.debug(f"msgData: [{msgData}],  expMsgData: [{expMsgData}]")
+        fmtSpecId = getMsgVal(msgData, 0)
+        
+        self.log.debug(f"FSID: [{fmtSpecId}],  msgData: [{msgData}],  expMsgData: [{expMsgData}]")
 
-        if self.getMsgVal(msgData, 0) == 102:               # Format specifier 102
-            pass
-            # DEC102()
-        elif self.getMsgVal(msgData, 0) == 112:               # Format specifier 112
-            pass
-            # DEC112()
-        elif self.getMsgVal(msgData, 0) == 114:               # Format specifier 114
-            pass
-            # DEC114()
-        elif self.getMsgVal(msgData, 0) == 116:               # Format specifier 116
-            pass
-            # DEC116()
-        elif self.getMsgVal(msgData, 0) == 120:               # Format specifier 120
-            pass
-            # DEC120()
-        elif self.getMsgVal(msgData, 0) == 123:               # Format specifier 123
-            pass
-            # DEC123()
-        else:
-            self.log.debug(f"Error or no supported format specifier: [{self.getMsgVal(msgData, 0)}]")
+        match fmtSpecId:
+            case 102:               # Format specifier 102
+                return DscSelectiveGeographicAreaMsg( msgData, expMsgData, self.dscDB)
+            case 112:               # Format specifier 112
+                pass
+                # DEC112()
+            case 114:               # Format specifier 114
+                pass
+                # DEC114()
+            case 116:               # Format specifier 116
+                pass
+                # DEC116()
+            case 120:               # Format specifier 120
+                pass
+                # DEC120()
+            case 123:               # Format specifier 123
+                pass
+                # DEC123()
+            case _:
+                self.log.debug(f"Error or no supported format specifier: [{fmtSpecId}]")
 
         if ((expMsgData is not None) and (len(expMsgData) != 0)):            # Decode the extension message
             pass

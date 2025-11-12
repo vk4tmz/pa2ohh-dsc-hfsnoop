@@ -26,7 +26,7 @@ from db.MidsDB import MidsDB
 from DSCConfig import DscConfig
 from typing import Optional
 
-from utils import TENunit,fromTENunit
+from utils import TENunit,fromTENunit, writeStringToFile
 
 dscCfg: DscConfig
 coastDB: CoastDB
@@ -1101,7 +1101,9 @@ def SELECTdecoder():
 
     if MSGstatus != 2:                  # Exit if MSGstatus not 2
         return()
-    
+
+    writeStringToFile(f"{dscCfg.freqDataDir}/msgdata_tests.txt", f"{MSGrdta(0)}|{MSGdata}|{EXPMSGdata}\n")
+
     if MSGrdta(0) == 102:               # Format specifier 102
         DEC102()
 

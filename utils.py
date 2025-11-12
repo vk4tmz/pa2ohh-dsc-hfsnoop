@@ -15,6 +15,28 @@ def makedirs(dirname:str):
 def getTimeStamp():
     return time.strftime("%Y%m%d-%H:%M:%S", time.gmtime())
 
+def writeStringsToFile(out_fn: str, str_list: list, append: bool=True):
+    wmode = "w"
+    if (append == True):
+        wmode ="a"
+
+    with open(out_fn, wmode) as file:                    
+            for item in str_list:
+                if (item is not None):
+                    file.write(item)
+
+    return 0
+
+def writeStringToFile(out_fn: str, item: str, append: bool=True):
+    wmode = "w"
+    if append:
+        wmode ="a"
+
+    with open(out_fn, wmode) as file:                    
+        file.write(item)
+
+    return 0
+
 ####################################################################
 # DSC Specific Utility / Helper Functions - to be moved/refactored later
 ####################################################################

@@ -1,9 +1,12 @@
 
 import logging
+import sys
+
 
 from FSKDecoder import FSKDecoder
 from utils import getMsgVal
-from DSCMessage import DscMessage, DscSelectiveGeographicAreaMsg
+from DSCMessage import DscMessage, DscSelectiveGeographicAreaMsg, DscDistressAlertMsg,\
+            DscRoutineGroupCallMsg, DscAllShipCallMsg, DscSelectiveIndividualCallMsg
 from db.DSCDatabases import DscDatabases
 
 FORMAT_SPECIFIERS = [102, 112, 114, 116, 120, 123]  # 
@@ -154,24 +157,20 @@ class DSCMessageFactory:
     def selectMessageDecoder(self, msgData, expMsgData) -> DscMessage | None:
         
         fmtSpecId = getMsgVal(msgData, 0)
-        
+
         self.log.debug(f"FSID: [{fmtSpecId}],  msgData: [{msgData}],  expMsgData: [{expMsgData}]")
 
         match fmtSpecId:
             case 102:               # Format specifier 102
-                return DscSelectiveGeographicAreaMsg( msgData, expMsgData, self.dscDB)
+                return DscSelectiveGeographicAreaMsg(msgData, expMsgData, self.dscDB)
             case 112:               # Format specifier 112
-                pass
-                # DEC112()
+                return DscDistressAlertMsg(msgData, expMsgData, self.dscDB)
             case 114:               # Format specifier 114
-                pass
-                # DEC114()
+                return DscRoutineGroupCallMsg(msgData, expMsgData, self.dscDB)
             case 116:               # Format specifier 116
-                pass
-                # DEC116()
+                return DscAllShipCallMsg(msgData, expMsgData, self.dscDB)
             case 120:               # Format specifier 120
-                pass
-                # DEC120()
+                return DscSelectiveIndividualCallMsg(msgData, expMsgData, self.dscDB)
             case 123:               # Format specifier 123
                 pass
                 # DEC123()

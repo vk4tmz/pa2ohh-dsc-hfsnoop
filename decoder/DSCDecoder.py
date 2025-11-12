@@ -55,7 +55,15 @@ class DSCDecoder:
                 print(f"PhasingDX Found, processing Message")
 
                 # Decode Message
-                self.msgFactory.processMessage()
+                msg = self.msgFactory.processMessage()
+
+                # TODO: Testing Logging of decoded msg. remove once returned msg has been queued and/or  we notify subscribers.s
+                if msg:
+                    out = []
+                    msg.print(out)
+                    self.log.info(HLINE)
+                    for ln in out:
+                        self.log.info(ln)
 
                 # Remove bits of at min the Phasing Sequence, to ensure all clear for next Phasing scan.
                 self.dec.removeBits(DXRX_PHASING_BIT_LEN+20)

@@ -21,3 +21,4 @@ class DscDatabases:
 
         self.coastDB = CoastDB(dscCfg)
         self.shipDB = ShipDB(dscCfg)
+        self.midsDB = MidsDB(dscCfg)

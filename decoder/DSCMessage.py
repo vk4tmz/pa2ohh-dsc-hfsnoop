@@ -94,9 +94,9 @@ class DscMessage(metaclass=ABCMeta):
         self.dscDB = dscDB;
         self.dscCfg = dscDB.dscCfg
 
-    def printFormatSpecifier(self, out:list):
+    def print(self, out: list):
         out.append(f"FMS-{self.fmtSpecId}: {self.fmtSpecDesc}")
-
+    
 
 #######################################################################
 #  DSCMessage common utililties and Helper functions
@@ -249,37 +249,38 @@ class DscMmsi:
         COASTindex = -1
         SHIPindex = -1
             
-        callsign = self.callsign[0:9]
+        callsign = self.callsign
+        callsign9 = self.callsign[0:9]
         coastDB = self.dscDB.coastDB
         shipDB = self.dscDB.shipDB
 
-        if callsign != "0":
-            out.append(f"{pretext} ERROR! MMSI [{self.callsign}] SHOULD END WITH A ZERO")
+        if callsign[-1:] != "0":
+            out.append(f"{pretext} ERROR! MMSI [{callsign}] SHOULD END WITH A ZERO")
             return
 
-        if callsign != "0":                            # INDIVIDUAL
+        if callsign[0:1] != "0":                            # INDIVIDUAL
             x = int(callsign[0:3])
-            out.append(f"{pretext} {callsign} INDIVIDUAL CC{callsign[0:3]} [" + self.mids(x) + "]")
+            out.append(f"{pretext} {callsign9} INDIVIDUAL CC{callsign[0:3]} [" + self.mids(x) + "]")
 
             if self.isSelfId:                          # Self ID station that transmits if True
-                COASTindex = coastDB.lookup(callsign, self.mids(x), False)    # Might be a Coast station with a "normal" MMSI in the COAST Data base
+                COASTindex = coastDB.lookup(callsign9, self.mids(x), False)    # Might be a Coast station with a "normal" MMSI in the COAST Data base
                 if COASTindex == -1:                    # No match in the COAST data base
-                    SHIPindex = shipDB.lookup(callsign, self.mids(x), True)  # Is a "normal" ship MMSI, perhaps in the SHIP data base, Always save
+                    SHIPindex = shipDB.lookup(callsign9, self.mids(x), True)  # Is a "normal" ship MMSI, perhaps in the SHIP data base, Always save
 
                     # TODO: Do we need to handle this or can it go ??
-                    POSmmsi = callsign             # Callsign for possible position saving
+                    POSmmsi = callsign9             # Callsign for possible position saving
         
         if callsign[0:1] == "0" and callsign[1:2] != "0":   # GROUP
             x = int(callsign[1:4])
-            out.append(f"{pretext} {callsign} GROUP CC{callsign[1:4]} [{self.mids(x)}]")
+            out.append(f"{pretext} {callsign9} GROUP CC{callsign[1:4]} [{self.mids(x)}]")
         
         if callsign[0:1] == "0" and callsign[1:2] == "0":   # COAST
             x = int(callsign[2:5])
-            out.append(f"{pretext} {callsign} COAST CC{callsign[2:5]} [{self.mids(x)}]")
+            out.append(f"{pretext} {callsign9} COAST CC{callsign[2:5]} [{self.mids(x)}]")
             if self.isSelfId == True:                          # Self ID station that transmits if True
                 COASTindex = coastDB.lookup(callsign, self.mids(x), True)     # Check the COAST data base and True=ALWAYS save
                 if COASTindex == -1:                    # NOT a match!
-                    out.append(f"{pretext} Unknown Coast station: {callsign}")
+                    out.append(f"{pretext} Unknown Coast station: {callsign9}")
 
         if COASTindex != -1:                            # A match in the COAST data base
             out.append(f"INFO-DB: [{coastDB.COASTname[COASTindex]}  {coastDB.COASTlat[COASTindex]} {coastDB.COASTlon[COASTindex]}]")
@@ -513,10 +514,12 @@ class DscEndOfSequence:
 
 
 #######################################################################
-#  class SelectiveGeographicAreaMsg - FS102
+#  class DscSelectiveGeographicAreaMsg - FS102
 #######################################################################
 
 class DscSelectiveGeographicAreaMsg(DscMessage):
+
+    log: logging.Logger
 
     zone: DscZone
     cat: DscCategory
@@ -530,10 +533,13 @@ class DscSelectiveGeographicAreaMsg(DscMessage):
     subComm: DscTeleCommand1
     freqRx: DscFrequency
     freqTx: DscFrequency
+
     eos: DscEndOfSequence
 
     def __init__(self, msgData:list, expMsgData:list, dscDB:DscDatabases) -> None:
         super().__init__(102, "Selective geographic area", msgData, expMsgData, dscDB)
+        self.log = logging.getLogger("%s.%s" % (__name__, self.__class__.__name__))
+
         self.zone = DscZone(msgData, 1)
         self.cat = DscCategory(getMsgVal(msgData, 6))
         
@@ -559,7 +565,8 @@ class DscSelectiveGeographicAreaMsg(DscMessage):
         # MSGstatus = 3       # Continue with the next search, messages have been decoded
 
     def print(self, out: list):
-        self.printFormatSpecifier(out)
+        super().print(out)
+
         self.zone.print(out)
         self.cat.print(out)
         
@@ -579,9 +586,322 @@ class DscSelectiveGeographicAreaMsg(DscMessage):
             self.freqRx.print("FREQ-RX:", out)
             self.freqTx.print("FREQ-TX:", out)
         
-
         self.eos.print(out)
                 
 
+#######################################################################
+#  class DscDistressAlertMsg - FS112
+#######################################################################
+
+class DscDistressAlertMsg(DscMessage):
+
+    log: logging.Logger
+
+    selfId: DscMmsi
+    nod: DscNatureOfDistress
+    pos: DscPosition
+    subComm: DscTeleCommand1
+    freqRx: DscFrequency
+    freqTx: DscFrequency
+
+    eos: DscEndOfSequence
+
+    def __init__(self, msgData:list, expMsgData:list, dscDB:DscDatabases) -> None:
+        super().__init__(112, "Distress", msgData, expMsgData, dscDB)
+        self.log = logging.getLogger("%s.%s" % (__name__, self.__class__.__name__))
+
+        # TODO: Need to ensure UI is notified
+        #SPECIAL()           # Special message
+
+        self.selfId = DscMmsi(msgData, 1, False, self.dscDB)
+        self.nod = DscNatureOfDistress(getMsgVal(msgData, 6))
+        self.pos = DscPosition(msgData, 7)
+        self.timeUtc = DscUtcTime(msgData, 12)
+        self.subComm = DscTeleCommand1(getMsgVal(msgData, 14))
+        self.eos = DscEndOfSequence(getMsgVal(msgData, len(msgData) - 2))
+
+        # MSGstatus = 3       # Continue with the next search, messages have been decoded
 
 
+    def print(self, out: list):
+        super().print(out)
+        
+        # TODO: original logic use "DIST-ID" as pretext ? but spec clearly calls this field "SELF-ID"
+        self.selfId.print("SELF-ID:", out)
+        self.nod.print(out)
+        self.pos.print(out)
+        self.timeUtc.print(out)
+        self.subComm.print(out);
+        self.eos.print(out)
+
+
+
+#######################################################################
+#  class DscRoutineGroupCallMsg - FS114
+#######################################################################
+
+class DscRoutineGroupCallMsg(DscMessage):
+
+    log: logging.Logger
+
+    adrsId: DscMmsi
+    cat: DscCategory
+    selfId: DscMmsi
+    tc1: DscTeleCommand1
+    tc2: DscTeleCommand2
+    freqRx: DscFrequency
+    freqTx: DscFrequency
+
+    eos: DscEndOfSequence
+
+    def __init__(self, msgData:list, expMsgData:list, dscDB:DscDatabases) -> None:
+        super().__init__(114, "Routine group call", msgData, expMsgData, dscDB)
+        self.log = logging.getLogger("%s.%s" % (__name__, self.__class__.__name__))
+
+        self.adrsId = DscMmsi(msgData, 1, False, self.dscDB)
+        self.cat = DscCategory(getMsgVal(msgData, 6))
+        self.selfId = DscMmsi(msgData, 7, False, self.dscDB)
+        self.tc1 = DscTeleCommand1(getMsgVal(msgData, 12))
+
+        match self.cat.catId:
+            case 112:                   # Distress Alert Relay Ack
+                # TODO: Only for VHF so to be done in future
+                self.log.warning("VHF - Distress Alert Relay Ack not currently not handled.")
+                pass
+            case 100:
+                self.tc2 = DscTeleCommand2(getMsgVal(msgData, 13))
+                self.freqRx = DscFrequency(msgData, 14)
+                self.freqTx = DscFrequency(msgData, 14+self.freqRx.freqLength)
+            case _:
+                self.log.error(f"DscRoutineGroupCallMsg: Unhandled category code: [{self.cat.catId}]")
+
+        self.eos = DscEndOfSequence(getMsgVal(msgData, len(msgData) - 2))
+
+        # MSGstatus = 3       # Continue with the next search, messages have been decoded
+
+
+    def print(self, out: list):
+        super().print(out)
+
+        self.adrsId.print("ADRS-ID:", out)
+        self.cat.print(out)
+        self.selfId.print("SELF-ID:", out)
+        self.tc1.print(out)
+
+        match self.cat.catId:
+            case 112:                   # Distress Alert Relay Ack - VHF
+                # TODO: Only for VHF so to be done in future
+                self.log.warning("VHF - Distress Alert Relay Ack not currently not handled.")
+                pass
+            case 100:
+                self.tc2.print(out)
+                self.freqRx.print("FREQ-RX:", out)
+                self.freqTx.print("FREQ-TX:", out)
+            case _:
+                self.log.error(f"DscRoutineGroupCallMsg: Unhandled category code: [{self.cat.catId}]")
+
+        self.eos.print(out)
+    
+    
+
+#######################################################################
+#  class DscAllShipCallMsg - FS116
+#######################################################################
+
+class DscAllShipCallMsg(DscMessage):
+    
+    cat: DscCategory
+    selfId: DscMmsi
+    distId: DscMmsi
+    nod: DscNatureOfDistress
+    pos: DscPosition
+    utcTime: DscUtcTime
+    subComm: DscTeleCommand1
+
+    tc1: DscTeleCommand1
+    tc2: DscTeleCommand2
+    freqRx: DscFrequency
+    freqTx: DscFrequency
+
+    eos: DscEndOfSequence
+
+    def __init__(self, msgData:list, expMsgData:list, dscDB:DscDatabases) -> None:
+        super().__init__(116, "All ships call", msgData, expMsgData, dscDB)
+        self.log = logging.getLogger("%s.%s" % (__name__, self.__class__.__name__))
+       
+        self.cat = DscCategory(getMsgVal(msgData, 1))
+
+        match self.cat.catId:
+            case 112:                   # Distress Ack
+                self.selfId = DscMmsi(msgData, 2, True, self.dscDB)
+                self.tc1 = DscTeleCommand1(getMsgVal(msgData, 7))
+                self.distId = DscMmsi(msgData, 8, False, self.dscDB)
+                self.nod = DscNatureOfDistress(getMsgVal(msgData, 13))
+                self.pos = DscPosition(msgData, 14)
+                self.timeUtc = DscUtcTime(msgData, 19)
+                self.subComm = DscTeleCommand1(getMsgVal(msgData, 21))
+            case 108 | 110:              # Urgency and Safety Calls - All shi[s]
+                self.selfId = DscMmsi(msgData, 2, True, self.dscDB)
+                self.tc1 = DscTeleCommand1(getMsgVal(msgData, 7))
+                self.tc2 = DscTeleCommand2(getMsgVal(msgData, 8))
+                self.freqRx = DscFrequency(msgData, 9)
+                self.freqTx = DscFrequency(msgData, 9+self.freqRx.freqLength)
+            case _:
+                self.log.error(f"DscAllShipCallMsg: Unhandled category code: [{self.cat.catId}]")
+
+        self.eos = DscEndOfSequence(getMsgVal(msgData, len(msgData) - 2))
+
+
+    def print(self, out: list):
+        super().print(out)
+
+        self.cat.print(out)
+
+        match self.cat.catId:
+            case 112:
+                self.selfId.print("SELF-ID:", out)
+                self.tc1.print(out)
+                self.distId.print("DIST-ID:", out)
+                self.nod.print(out)
+                self.pos.print(out)
+                self.timeUtc.print(out)
+                self.subComm.print(out);
+            case 108 | 110:
+                self.selfId.print("SELF-ID:", out)
+                self.tc1.print(out)
+                self.tc2.print(out)
+                self.freqRx.print("FREQ-RX:", out)
+                self.freqTx.print("FREQ-TX:", out)
+            case _:
+                self.log.error(f"DscAllShipCallMsg: Unhandled category code: [{self.cat.catId}]")    
+
+        self.eos.print(out)
+
+
+#######################################################################
+#  class DscSelectiveIndividualCallMsg - FS120
+#######################################################################
+
+class DscSelectiveIndividualCallMsg(DscMessage):
+
+    isTestMsg: bool = False
+
+    cat: DscCategory
+    selfId: DscMmsi
+    distId: DscMmsi
+    nod: DscNatureOfDistress
+    pos: DscPosition
+    utcTime: DscUtcTime
+    subComm: DscTeleCommand1
+
+    tc1: DscTeleCommand1
+    tc2: DscTeleCommand2
+    freqRx: DscFrequency
+    freqTx: DscFrequency
+
+    eos: DscEndOfSequence
+
+    def __init__(self, msgData:list, expMsgData:list, dscDB:DscDatabases) -> None:
+        super().__init__(120, "Selective individual call", msgData, expMsgData, dscDB)
+        self.log = logging.getLogger("%s.%s" % (__name__, self.__class__.__name__))
+       
+        self.adrsId = DscMmsi(msgData, 1, False, self.dscDB)
+        self.cat = DscCategory(getMsgVal(msgData, 6))
+        
+        match self.cat.catId:
+            case 100: 
+                self.selfId = DscMmsi(msgData, 7, True, self.dscDB)
+                self.tc1 = DscTeleCommand1(getMsgVal(msgData, 12))
+                self.tc2 = DscTeleCommand2(getMsgVal(msgData, 13))
+                if getMsgVal(msgData, 14) == 55:                   # Position update 1st frequency symbol=55
+                    pos = DscPosition(msgData, 15)
+                    
+                    # TODO: Need to refactor the SAVEpos() logic
+                    # SAVEpos()                           # Save the ship position
+
+                    if getMsgVal(msgData, 20) < 100:               # No EOS but time
+                        self.utcTime = DscUtcTime(msgData, 20)
+
+                else:    
+                    self.freqRx = DscFrequency(msgData, 14)
+                    self.freqTx = DscFrequency(msgData, 14+self.freqRx.freqLength)
+
+            case 112:           # Distress Alert Relays & Ack
+                self.selfId = DscMmsi(msgData, 7, True, self.dscDB)
+                self.tc1 = DscTeleCommand1(getMsgVal(msgData, 12))
+                self.distId = DscMmsi(msgData, 13, False, self.dscDB)
+                self.nod = DscNatureOfDistress(getMsgVal(msgData, 18))
+                self.pos = DscPosition(msgData, 19)
+                self.timeUtc = DscUtcTime(msgData, 24)
+                self.subComm = DscTeleCommand1(getMsgVal(msgData, 26))
+            case 108 | 110:
+                if getMsgVal(msgData, 12) == 118 and getMsgVal(msgData, 14) == 126:   # Test message
+                    self.isTestMsg = True                                             # It is a test message and continue with decoding
+
+                self.selfId = DscMmsi(msgData, 7, True, self.dscDB)
+                self.tc1 = DscTeleCommand1(getMsgVal(msgData, 12))
+                self.tc2 = DscTeleCommand2(getMsgVal(msgData, 13))
+
+                if getMsgVal(msgData, 14) == 55:                   # Position update 1st frequency symbol=55
+                    pos = DscPosition(msgData, 15)
+                    
+                    # TODO: Need to refactor the SAVEpos() logic
+                    # SAVEpos()                           # Save the ship position
+
+                    if getMsgVal(msgData, 20) < 100:               # No EOS but time
+                        self.utcTime = DscUtcTime(msgData, 20)
+
+                else:    
+                    self.freqRx = DscFrequency(msgData, 14)
+                    self.freqTx = DscFrequency(msgData, 14+self.freqRx.freqLength)
+
+            case _:
+                pass
+
+        self.eos = DscEndOfSequence(getMsgVal(msgData, len(msgData) - 2))
+
+
+    def print(self, out: list):
+        super().print(out)
+
+        self.adrsId.print("ADRS-ID:", out)
+        self.cat.print(out)
+
+        match self.cat.catId:
+            case 100:
+                self.selfId.print("SELF-ID:", out)
+                self.tc1.print(out)
+                self.tc2.print(out)
+                # if (self.pos is not None):
+                if hasattr(self, "pos"):
+                    self.pos.print(out)
+                    # if (self.utcTime is not None):
+                    if hasattr(self, "utcTime"):
+                        self.utcTime.print(out)
+                else:
+                    self.freqRx.print("FREQ-RX:", out)
+                    self.freqTx.print("FREQ-TX:", out)
+            case 108 | 110:
+                self.selfId.print("SELF-ID:", out)
+                self.tc1.print(out)
+                self.tc2.print(out)
+                # if (self.pos is not None):
+                if hasattr(self, "pos"):
+                    self.pos.print(out)
+                    # if (self.utcTime is not None):
+                    if hasattr(self, "utcTime"):
+                        self.utcTime.print(out)
+                else:
+                    self.freqRx.print("FREQ-RX:", out)
+                    self.freqTx.print("FREQ-TX:", out)
+
+            case 112:
+                self.selfId.print("SELF-ID:", out)
+                self.tc1.print(out)
+                self.distId.print("DIST-ID:", out)
+                self.nod.print(out)
+                self.pos.print(out)
+                self.timeUtc.print(out)
+                self.subComm.print(out);
+
+        self.eos.print(out)

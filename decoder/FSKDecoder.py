@@ -10,6 +10,7 @@ sys.path.insert(0, '.')
 
 from utils import TENunit, fromTENunit
 from audio.source import AudioSource, RawAudioSource
+from decoder.Bits import BitQueue
 from collections import deque
 from time import sleep
 
@@ -18,7 +19,6 @@ LM_AUTO = "A"
 LM_MANUAL = "M"
 
 WAIT_TIME_FOR_AUDIO = 0.02
-WAIT_TIME_FOR_BITS  = 0.025
 
 ############################################################################################################################################
 # Initialisation of global variables required in various routines (MODIFY THEM ONLY IF NECESSARY!)
@@ -40,7 +40,7 @@ class FSKDecoder:
     decoderHandlerRunning:bool = False
     decoderHandlerThread:threading.Thread
 
-    strYBY: deque 
+    strYBY: BitQueue 
     markSym: str = "Y"
     spaceSym: str = "B"
 
@@ -86,7 +86,7 @@ class FSKDecoder:
         self.lck_centerFreq = centerFreq
         self.tonesInverted = tonesInverted
 
-        self.strYBY = deque([])        
+        self.strYBY = BitQueue()
         self.updateFFTParams(400, 2400)
 
     def invertTonesBits(self):
@@ -346,42 +346,6 @@ class FSKDecoder:
             self.syncTcor = 0                                                                    # Reset SYNCTcor
 
             AddYBY = AddYBY + 1
-
-    def availableBits(self):
-        return len(self.strYBY)
-
-    def waitForBits(self, minBits:int):
-        while len(self.strYBY) < minBits:
-            sleep(WAIT_TIME_FOR_BITS)
-
-    def padBits(self, numBits):
-        self.log.debug(f"Pre-padding strYBY with {numBits} Y's....")
-        pad = "Y" * numBits
-        self.strYBY.extendleft(pad)
-
-    def getBits(self, idx:int, length:int) -> str:
-        self.waitForBits(idx + length)
-    
-        res = ""
-        for n in range(idx, idx+length):
-            res += self.strYBY[n]
-
-        return res
-    
-    def removeBits(self, length:int):
-        for n in range(0, length):
-            self.strYBY.popleft()
-
-    # ... Return the value of symbol i (start at 1, only the first 7 bits are used) ...
-    def getValSymbol(self, startOfs:int, symIdx:int):
-
-        n = startOfs + (symIdx-1)*10        # msg is start position in strYBY of message
-        if n < 0:                           # If out of range of strYBY then return -1
-            return(-1)
-        
-        s = self.getBits(n, 10)
-
-        return fromTENunit(s)
     
     def setLockFreq(self, isLocked:bool):
         self.isLockFreq = isLocked
@@ -410,15 +374,15 @@ def main():
     ps = -1;
     while (cnt < 600):
         sleep(0.1)
-        if len(dec.strYBY) > ps:
-            ps = len(dec.strYBY)
+        if dec.strYBY.length() > ps:
+            ps = dec.strYBY.length()
         else:
             # buffer has not grown so assume end of processing reached
             break
 
         cnt += 1
 
-    print(f"DEBUG: strYBY - Len: [{len(dec.strYBY)}] - Data: [{"".join(dec.strYBY)}]")
+    print(f"DEBUG: strYBY - Len: [{dec.strYBY.length()}] - Data: [{dec.strYBY.toString()}]")
     dec.stopDecoder()
 
 

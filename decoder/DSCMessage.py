@@ -384,7 +384,7 @@ class DscUtcTime:
 
     def __init__(self, msgData:list, idx:int) -> None:
         # ... Decode a time in UTC ...    
-        self.strUTC = getMsgPaddedVals(msgData, idx, 10)
+        self.strUTC = getMsgPaddedVals(msgData, idx, 2)
         
     
     def print(self, out: list):
@@ -841,7 +841,7 @@ class DscSelectiveIndividualCallMsg(DscMessage):
                 self.tc1 = DscTeleCommand1(getMsgVal(msgData, 12))
                 self.tc2 = DscTeleCommand2(getMsgVal(msgData, 13))
                 if getMsgVal(msgData, 14) == 55:                   # Position update 1st frequency symbol=55
-                    pos = DscPosition(msgData, 15)
+                    self.pos = DscPosition(msgData, 15)
                     
                     # TODO: Need to refactor the SAVEpos() logic
                     # SAVEpos()                           # Save the ship position
@@ -870,7 +870,7 @@ class DscSelectiveIndividualCallMsg(DscMessage):
                 self.tc2 = DscTeleCommand2(getMsgVal(msgData, 13))
 
                 if getMsgVal(msgData, 14) == 55:                   # Position update 1st frequency symbol=55
-                    pos = DscPosition(msgData, 15)
+                    self.pos = DscPosition(msgData, 15)
                     
                     # TODO: Need to refactor the SAVEpos() logic
                     # SAVEpos()                           # Save the ship position

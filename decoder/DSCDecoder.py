@@ -1,12 +1,13 @@
 import logging
 import sys
-from time import sleep
+
 
 sys.path.insert(0, '..')
 sys.path.insert(0, '.')
 
 from utils import TENunit, fromTENunit
 from audio.source import AudioSource, RawAudioSource
+from decoder.Bits import BitQueue
 from decoder.FSKDecoder import FSKDecoder, LM_AUTO, LM_MANUAL
 from decoder.DSCMessageFactory import DSCMessageFactory
 
@@ -30,6 +31,7 @@ logging.basicConfig(level=logging.DEBUG)
 class DSCDecoder:
 
     dec: FSKDecoder
+    bits: BitQueue
     dscCfg: DscConfig
     dscDB: DscDatabases
     msgFactory: DSCMessageFactory
@@ -40,7 +42,8 @@ class DSCDecoder:
 
         self.dscDB = DscDatabases(dscCfg)
         self.dec = FSKDecoder(audioSrc=audioSrc, shiftFreq=SHIFTfrequency, bitRate=BITrate, lockMode=lockMode,centerFreq=centerFreq, tonesInverted=tonesInverted)
-        self.msgFactory = DSCMessageFactory(dec=self.dec, dscDB=self.dscDB)
+        self.bits = self.dec.strYBY
+        self.msgFactory = DSCMessageFactory(bits=self.dec.strYBY, dscDB=self.dscDB)
 
     def startDecoder(self):
         # TODO: Thread this
@@ -68,7 +71,7 @@ class DSCDecoder:
 
                 finally:
                     # Remove bits of at min the Phasing Sequence, to ensure all clear for next Phasing scan.
-                    self.dec.removeBits(DXRX_PHASING_BIT_LEN+20)
+                    self.bits.removeBits(DXRX_PHASING_BIT_LEN+20)
             else:
                 self.log.debug(f"No PhasingDX Found....")
 
@@ -84,9 +87,9 @@ class DSCDecoder:
             strDATA = ""
             i = 1
             while DATAerror < 5:                                    # Print data till 5 errors
-                strDATA = strDATA +"(" + str(self.dec.getValSymbol(startIdx, i)) + ")"
+                strDATA = strDATA +"(" + str(self.bits.getValSymbol(startIdx, i)) + ")"
                 if i > 16:                                          # End of phasing and start of data
-                    if self.dec.getValSymbol(startIdx, i) < 0:
+                    if self.bits.getValSymbol(startIdx, i) < 0:
                         DATAerror = DATAerror + 1
                 i = i + 1
 
@@ -105,7 +108,7 @@ class DSCDecoder:
         #     FFTaverage = FFTresult                        # Reset FFTaverage for new search
         #     MSGstatus = 0                                 # And set the status to search
 
-        self.dec.waitForBits(MinBits)
+        self.bits.waitForBits(MinBits)
                 
         # Phasing is [125][111], [125][110] .. [125][105]
         #  Original logic only looked for the match on RX value 108 or 107, which could allow for missed decodes if 
@@ -115,13 +118,13 @@ class DSCDecoder:
         #   se2 = TENunit(107) + TENunit(125)       # Define search string 2 for phasing
     
         i = Starti
-        L = len(self.dec.strYBY)
+        L = self.bits.length()
         while i < L:
 
-            if self.dec.getBits(i, 10) == PHASEDXbits:
-                phaseDxIdxBitsA = self.dec.getBits(i+10, 10)     # RX After DX
+            if self.bits.getBits(i, 10) == PHASEDXbits:
+                phaseDxIdxBitsA = self.bits.getBits(i+10, 10)     # RX After DX
                 phaseDxIdxA = fromTENunit(phaseDxIdxBitsA)
-                phaseDxIdxBitsB = self.dec.getBits(i-10, 10)     # RX Before DX
+                phaseDxIdxBitsB = self.bits.getBits(i-10, 10)     # RX Before DX
                 phaseDxIdxB = fromTENunit(phaseDxIdxBitsB)
                 
                 foundPossiblePhasing = False
@@ -140,19 +143,19 @@ class DSCDecoder:
                     padLen = 0
                     if (phaseDxStartIdx < 0):
                         padLen = abs(phaseDxStartIdx)
-                        self.dec.padBits(padLen)
+                        self.bits.padBits(padLen)
                         phaseDxStartIdx = 0
                         
                     # Ensure we have 120 bits (6xDX + 6xRX) to ensure us to perform out Counts
-                    self.dec.waitForBits(phaseDxStartIdx + DXRX_PHASING_BIT_LEN)
+                    self.bits.waitForBits(phaseDxStartIdx + DXRX_PHASING_BIT_LEN)
                     
                     # Compute Counts of Valid DX and RX values from computed starting DX Phase 
                     phaseDxCnt = 0;
                     phaseRxSeen = [];
                     for phIdx in range(0, 6): # 106..111
                         dxi = phaseDxStartIdx + (phIdx * 20)
-                        dxVal = self.dec.getBits(dxi, 10)
-                        rxVal = self.dec.getBits(dxi+10, 10)
+                        dxVal = self.bits.getBits(dxi, 10)
+                        rxVal = self.bits.getBits(dxi+10, 10)
                         if dxVal == PHASEDXbits:
                             phaseDxCnt += 1
                         if rxVal == TENunit(111-phIdx):
@@ -175,7 +178,7 @@ class DSCDecoder:
                         self.logValSymbols(phaseDxStartIdx)
 
                         # Remove all bits prior to start of First PhasingDX
-                        self.dec.removeBits(phaseDxStartIdx)
+                        self.bits.removeBits(phaseDxStartIdx)
 
                         # Successfully achieved Phasing.
                         return True
@@ -186,7 +189,7 @@ class DSCDecoder:
 
                     # Clean up - remove any pre-padding
                     if (padLen > 0):
-                        self.dec.removeBits(padLen)
+                        self.bits.removeBits(padLen)
 
             i = i + 1
 
@@ -194,7 +197,7 @@ class DSCDecoder:
         # FileHandling()
         
         # Process the processed L BITS up, to clear them out from next Phasing Scan
-        self.dec.removeBits(L)
+        self.bits.removeBits(L)
         return None
 
 

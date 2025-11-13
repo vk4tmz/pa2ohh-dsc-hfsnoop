@@ -3,12 +3,13 @@ import logging
 import sys
 
 
-from FSKDecoder import FSKDecoder
+from decoder.FSKDecoder import FSKDecoder
 from utils import getMsgVal
-from DSCMessage import DscMessage, DscSelectiveGeographicAreaMsg, DscDistressAlertMsg,\
+from decoder.DSCMessage import DscMessage, DscSelectiveGeographicAreaMsg, DscDistressAlertMsg,\
             DscRoutineGroupCallMsg, DscAllShipCallMsg, DscSelectiveIndividualCallMsg,\
             DscSelectiveIndividualAutomaticCallMsg
-from DSCExpansionMessageFactory import DSCExpansionMessageFactory
+from decoder.DSCExpansionMessageFactory import DSCExpansionMessageFactory
+from decoder.Bits import BitQueue
 from db.DSCDatabases import DscDatabases
 
 FORMAT_SPECIFIERS = [102, 112, 114, 116, 120, 123]  # 
@@ -19,21 +20,21 @@ DEBUG = 0
 class DSCMessageFactory:
 
     dscDB : DscDatabases
-    dec: FSKDecoder
+    bits: BitQueue
     expMsgFactory: DSCExpansionMessageFactory
     log: logging.Logger
 
     ensureFormatSpecifiersSame: bool = False
 
-    def __init__(self, dec: FSKDecoder, dscDB : DscDatabases):
+    def __init__(self, bits: BitQueue, dscDB : DscDatabases):
         self.log = logging.getLogger("%s.%s" % (__name__, self.__class__.__name__))
-        self.dec = dec
+        self.bits = bits
         self.dscDB = dscDB
         self.expMsgFactory = DSCExpansionMessageFactory()
 
 
     def getValSymbol(self, idx):
-        return self.dec.getValSymbol(0, idx)
+        return self.bits.getValSymbol(0, idx)
 
     def getMessageFrame(self, i:int, dest:list, errMsg:str):
         Vprevious = -1
@@ -122,11 +123,12 @@ class DSCMessageFactory:
         #     address characters provide additional protection against false alerting and, therefore, single
         #     detection of the format specifier character is considered satisfactory (see Table 3).
         if ((fs1 in FORMAT_SPECIFIERS_SAME) or (fs2 in FORMAT_SPECIFIERS_SAME)):
-            if ((fs1 != fs2) and (self.ensureFormatSpecifiersSame)):
-                self.log.debug(f"Format specifiers not identical - fs1: [{fs1}]  fs2: [{fs2}]")
-                return None
-            else:
-                self.log.debug(f"Format specifiers not identical - fs1: [{fs1}]  fs2: [{fs2}] - Continuing")
+            if (fs1 != fs2):
+                if (self.ensureFormatSpecifiersSame):
+                    self.log.debug(f"Format specifiers not identical - fs1: [{fs1}]  fs2: [{fs2}]")
+                    return None
+                else:
+                    self.log.debug(f"Format specifiers not identical - fs1: [{fs1}]  fs2: [{fs2}] - Continuing")
 
         # ... Make the message data and store in msgData ...
         msgData = []                        # Clear the data

@@ -122,10 +122,22 @@ EOS-117: Acknowledgement required
 
 ### Example 3:
 
-!!! **Fails to decode** !!!
-While investigating why the SigID Wiki GMDSS_2.mp3 example failed to decode, I identified it's tones were reversed (ie possibly recorded using LSB instead of USB). But unfortunately even when I invert the tones and can see we are successfully geting Phase & DX Sync, immediately following all characters seems fail with parity bit test.
+While investigating why the SigID Wiki GMDSS_2.mp3 example failed to decode, I identified it's tones were reversed (ie possibly recorded using LSB instead of USB). 
+
 ```
-sox /tmp/GMDSS_2.mp3 -t raw -r 44100 -b 16 -c 1 - |  python DSCHFsnoop.py 9999999 -as - -sr 44100
+sox /tmp/GMDSS_2.mp3 -t raw -r 44100 -b 16 -c 1 - |  python DSCHFsnoop.py 9999999 -as - -sr 44100 --inv
+
+===================================
+FMS-120: Selective individual call
+ADRS-ID: 230145000 INDIVIDUAL CC230 [Finland]
+CAT-108: Safety
+SELF-ID: 002191000 COAST CC219 [Denmark]
+SELF-ID: Unknown Coast station: 002191000
+TC1-118: Test
+TC2-126: No Availability information
+FREQ-RX: NONE
+FREQ-TX: NONE
+EOS-122: Acknowledgement given
 ```
 
 ### Example 4:

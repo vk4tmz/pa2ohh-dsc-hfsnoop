@@ -3,10 +3,10 @@ import logging
 
 from DSCConfig import DscConfig
 from db.DSCDatabases import DscDatabases
-from utils import getMsgVal, getMsgPaddedVals
+from decoder.DSCExpansionMessage import DscExpansionMessage
+from utils import getMsgVal, getMsgPaddedVals, getMsgPaddedValsVarLen, is_even
 
-from abc import ABCMeta, abstractmethod
-from typing import Iterable, BinaryIO
+from abc import ABCMeta
 
 DEBUG = 0
 
@@ -84,6 +84,7 @@ class DscMessage(metaclass=ABCMeta):
     fmtSpecDesc: str
     msgData: list
     expMsgData: list
+    expMsgs: list[DscExpansionMessage]
 
     def __init__(self, fmtSpecId: int, fmtSpecDesc: str, msgData:list, expMsgData:list, dscDB:DscDatabases) -> None:
         self.log = logging.getLogger("%s.%s" % (__name__, self.__class__.__name__))
@@ -496,6 +497,32 @@ class DscFrequency:
         out.append(f"{pretext} {self.frequency[0:6]}")
 
 
+class DscNumber:
+
+    isValid: bool = True
+    expNumLenEven: bool = False
+    number: str
+
+    def __init__(self, msgData:list, idx:int) -> None:
+        # ... Decode a number par 8.3.3 ...
+
+        v = getMsgVal(msgData, idx)
+        if v != 105 and v != 106:     # Only if a number follows, 105 for odd and 106 for even
+            self.isValid = False
+            return
+        
+        self.expNumLenEven = (v == 106)
+
+        self.number = getMsgPaddedValsVarLen(getMsgVal, idx+1)
+        self.isValid = ((is_even(len(self.number)) and self.expNumLenEven) or
+                        (not is_even(len(self.number)) and not self.expNumLenEven))
+
+
+    def print(self, out: list):
+        out.append(f"Number: {self.number}")
+        
+
+
 class DscEndOfSequence:
     
     log: logging.Logger
@@ -905,3 +932,46 @@ class DscSelectiveIndividualCallMsg(DscMessage):
                 self.subComm.print(out);
 
         self.eos.print(out)
+
+
+
+#######################################################################
+#  class DscSelectiveIndividualAutomaticCallMsg - FS123 (Auto VHF Optional)
+#######################################################################
+
+class DscSelectiveIndividualAutomaticCallMsg(DscMessage):
+
+    adrsId: DscMmsi
+    cat: DscCategory
+    selfId: DscMmsi
+    tc1: DscTeleCommand1
+    tc2: DscTeleCommand2
+    freqRx: DscFrequency
+    number: DscNumber
+
+    eos: DscEndOfSequence
+
+    def __init__(self, msgData:list, expMsgData:list, dscDB:DscDatabases) -> None:
+        super().__init__(123, "Selective individual automatic call", msgData, expMsgData, dscDB)
+        self.log = logging.getLogger("%s.%s" % (__name__, self.__class__.__name__))
+
+        self.adrsId = DscMmsi(msgData, 1, False, self.dscDB)
+        self.cat = DscCategory(getMsgVal(msgData, 6))
+        self.selfId = DscMmsi(msgData, 7, False, self.dscDB)
+        self.tc1 = DscTeleCommand1(getMsgVal(msgData, 12))
+        self.tc2 = DscTeleCommand2(getMsgVal(msgData, 13))
+        self.freqRx = DscFrequency(msgData, 14)
+        self.number = DscNumber(msgData, 14+self.freqRx.freqLength)
+
+        self.eos = DscEndOfSequence(getMsgVal(msgData, len(msgData) - 2))
+
+    def print(self, out: list):
+        super().print(out)
+
+        self.adrsId.print("ADRS-ID:", out)
+        self.cat.print(out)
+        self.selfId.print("SELF-ID:", out)
+        self.tc1.print(out)
+        self.tc2.print(out)
+        self.freqRx.print("FREQUENCY:", out)
+        self.number.print(out)

@@ -2,6 +2,8 @@
 import os
 import time
 
+from collections import deque
+
 ####################################################################
 # Common Utility / Helper Functions - to be moved/refactored later
 ####################################################################
@@ -37,9 +39,56 @@ def writeStringToFile(out_fn: str, item: str, append: bool=True):
 
     return 0
 
+def is_even(v:int):
+    return ((v % 2) == 0)
+
+def is_odd(v:int):
+    return ((v % 2) != 0)
+
+def popLeft(data: deque, num:int) -> list:
+    res = []
+    for n in range(0, num):
+        res.append(data.popleft())
+
+    return res
+
+
+
 ####################################################################
 # DSC Specific Utility / Helper Functions - to be moved/refactored later
 ####################################################################
+
+def getMsgValsVarLen(data, idx):
+    res =[]
+    
+    N = 0
+    while ((idx + N) < len(data)):
+        v = getMsgVal(data, idx + N) 
+        if (v >= 100):
+            break
+
+        res.append(v)
+        N = N + 1
+
+    return res
+
+def getMsgPaddedValsVarLen(data, idx):
+    strNR = ""
+    
+    N = 0
+    while ((idx + N) < len(data)):
+        v = getMsgVal(data, idx + N) 
+        if (v >= 100):
+            break
+
+        if v < 10:
+            strNR = strNR + "0" 
+
+        s = str(v)
+        strNR = strNR + s.strip()
+        N = N + 1
+
+    return strNR
 
 def getMsgPaddedVals(data, idx, length):
     txt = ""

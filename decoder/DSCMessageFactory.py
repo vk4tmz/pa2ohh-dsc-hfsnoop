@@ -6,7 +6,9 @@ import sys
 from FSKDecoder import FSKDecoder
 from utils import getMsgVal
 from DSCMessage import DscMessage, DscSelectiveGeographicAreaMsg, DscDistressAlertMsg,\
-            DscRoutineGroupCallMsg, DscAllShipCallMsg, DscSelectiveIndividualCallMsg
+            DscRoutineGroupCallMsg, DscAllShipCallMsg, DscSelectiveIndividualCallMsg,\
+            DscSelectiveIndividualAutomaticCallMsg
+from DSCExpansionMessageFactory import DSCExpansionMessageFactory
 from db.DSCDatabases import DscDatabases
 
 FORMAT_SPECIFIERS = [102, 112, 114, 116, 120, 123]  # 
@@ -18,6 +20,7 @@ class DSCMessageFactory:
 
     dscDB : DscDatabases
     dec: FSKDecoder
+    expMsgFactory: DSCExpansionMessageFactory
     log: logging.Logger
 
     ensureFormatSpecifiersSame: bool = False
@@ -26,6 +29,7 @@ class DSCMessageFactory:
         self.log = logging.getLogger("%s.%s" % (__name__, self.__class__.__name__))
         self.dec = dec
         self.dscDB = dscDB
+        self.expMsgFactory = DSCExpansionMessageFactory()
 
 
     def getValSymbol(self, idx):
@@ -160,28 +164,31 @@ class DSCMessageFactory:
 
         self.log.debug(f"FSID: [{fmtSpecId}],  msgData: [{msgData}],  expMsgData: [{expMsgData}]")
 
+        msg: DscMessage
         match fmtSpecId:
             case 102:               # Format specifier 102
-                return DscSelectiveGeographicAreaMsg(msgData, expMsgData, self.dscDB)
+                msg = DscSelectiveGeographicAreaMsg(msgData, expMsgData, self.dscDB)
             case 112:               # Format specifier 112
-                return DscDistressAlertMsg(msgData, expMsgData, self.dscDB)
+                msg = DscDistressAlertMsg(msgData, expMsgData, self.dscDB)
             case 114:               # Format specifier 114
-                return DscRoutineGroupCallMsg(msgData, expMsgData, self.dscDB)
+                msg = DscRoutineGroupCallMsg(msgData, expMsgData, self.dscDB)
             case 116:               # Format specifier 116
-                return DscAllShipCallMsg(msgData, expMsgData, self.dscDB)
+                msg = DscAllShipCallMsg(msgData, expMsgData, self.dscDB)
             case 120:               # Format specifier 120
-                return DscSelectiveIndividualCallMsg(msgData, expMsgData, self.dscDB)
+                msg = DscSelectiveIndividualCallMsg(msgData, expMsgData, self.dscDB)
             case 123:               # Format specifier 123
-                pass
-                # DEC123()
+                msg = DscSelectiveIndividualAutomaticCallMsg(msgData, expMsgData, self.dscDB)
             case _:
                 self.log.debug(f"Error or no supported format specifier: [{fmtSpecId}]")
+                return None
+
+        if (msg is None):
+            return None
 
         if ((expMsgData is not None) and (len(expMsgData) != 0)):            # Decode the extension message
-            pass
-            # DSCExpansion821()
+            msg.expMsgs = self.expMsgFactory.processMessages(expMsgData)
 
-        # TODO: return the final message
-        return None
+
+        return msg
         
     

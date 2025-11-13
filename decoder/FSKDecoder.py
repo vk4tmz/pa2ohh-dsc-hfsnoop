@@ -6,6 +6,7 @@ import sys
 import threading
 
 sys.path.insert(0, '..')
+sys.path.insert(0, '.')
 
 from utils import TENunit, fromTENunit
 from audio.source import AudioSource, RawAudioSource
@@ -88,6 +89,11 @@ class FSKDecoder:
         self.strYBY = deque([])        
         self.updateFFTParams(400, 2400)
 
+    def invertTonesBits(self):
+        if self.tonesInverted:
+            tmp = self.bitY
+            self.bitY = self.bitB
+            self.bitB = tmp
 
     def updateFFTParams(self, lowSearchf:int, highSearchf:int):
         self.lowSearchf = lowSearchf
@@ -110,6 +116,9 @@ class FSKDecoder:
         else:
             self.bitY = int((self.lck_centerFreq - (self.shiftFreq / 2)) / (sampleRate / (self.fftLength - 1)) - self.startSample + 0.5)
             self.bitB = self.bitY + self.shiftSamples
+
+        self.invertTonesBits()
+        
 
     ########################################################################################################
     # Audio Handler
@@ -296,6 +305,7 @@ class FSKDecoder:
             self.bitB = B
             self.bitY = B - self.shiftSamples
 
+        self.invertTonesBits()
     
     # ============= Convert AUDIOsignal1[] audio data to strYBY =======================
     def MakeYBY(self):                              # Read the audio and make strYBY
@@ -383,14 +393,29 @@ class FSKDecoder:
 def main():
     audioSrc = RawAudioSource(src=sys.stdin.buffer, sampleRate=44100)
 
-    #dec = FSKDecoder(audioSrc, 170, 100, lockMode=LM_MANUAL, centerFreq=1700)
-    dec = FSKDecoder(audioSrc, 170, 100, lockMode=LM_AUTO)
+    # dec = FSKDecoder(audioSrc, 170, 100, lockMode=LM_MANUAL, centerFreq=1700)
+    # dec = FSKDecoder(audioSrc, 170, 100, lockMode=LM_AUTO)
+
+    # strange SigId Example GDMSS_2.mp3 - inverted
+    dec = FSKDecoder(audioSrc, 170, 100, lockMode=LM_AUTO, tonesInverted=True)
+    # dec = FSKDecoder(audioSrc, 170, 100, lockMode=LM_MANUAL, centerFreq=1700, tonesInverted=True)
+
+    # SELCALL 
+    # dec = FSKDecoder(audioSrc, 170, 100, lockMode=LM_AUTO, tonesInverted=True)
+    # dec = FSKDecoder(audioSrc, 170, 100, lockMode=LM_MANUAL, centerFreq=1800, tonesInverted=True)
+
     dec.startDecoder()
 
     cnt = 0
-    while (cnt < 20):
-        # print(".", end='', flush=True)
-        sleep(0.5)
+    ps = -1;
+    while (cnt < 600):
+        sleep(0.1)
+        if len(dec.strYBY) > ps:
+            ps = len(dec.strYBY)
+        else:
+            # buffer has not grown so assume end of processing reached
+            break
+
         cnt += 1
 
     print(f"DEBUG: strYBY - Len: [{len(dec.strYBY)}] - Data: [{"".join(dec.strYBY)}]")

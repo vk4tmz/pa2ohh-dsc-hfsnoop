@@ -208,6 +208,10 @@ def main():
 
     #dec = DSCDecoder(audioSrc, lockMode=LM_MANUAL, centerFreq=1700)
     dec = DSCDecoder(audioSrc, dscCfg, lockMode=LM_AUTO)
+
+    # GMDSS_2 - Is Inverted
+    # dec = DSCDecoder(audioSrc, dscCfg, lockMode=LM_AUTO, tonesInverted=True)
+    
     dec.startDecoder()
 
     # print(f"DEBUG: Remaining strYBY - Len: [{len(self.dec.strYBY)}] - Data: [{"".join(self.dec.strYBY)}]")

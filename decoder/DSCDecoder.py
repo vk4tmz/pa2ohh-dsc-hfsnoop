@@ -12,7 +12,7 @@ from utils import TENunit, fromTENunit
 
 from audio.source import AudioSource, RawAudioSource
 from decoder.Bits import BitQueue
-from decoder.FSKDecoder import FSKDecoder, LM_AUTO, LM_MANUAL
+from decoder.FSKDemodulator import FSKDemodulator, LM_AUTO, LM_MANUAL
 from decoder.DSCMessageFactory import DSCMessageFactory
 from decoder.DSCEvents import NewDscMessageEvent, LogDscInfoEvent, LogDscResultEvent
 
@@ -31,7 +31,7 @@ PHASEDXbits = TENunit(125)
 NEW_DEBUG = 0
 HLINE = "==================================="       # Message separation line
 
-logging.basicConfig(level=logging.DEBUG)
+# logging.basicConfig(level=logging.DEBUG)
 
 
 @EventLinker.on(NewDscMessageEvent)
@@ -45,7 +45,7 @@ def printNewMessage(e:NewDscMessageEvent):
 
 class DSCDecoder:
 
-    dec: FSKDecoder
+    dem: FSKDemodulator
     bits: BitQueue
     dscCfg: DscConfig
     dscDB: DscDatabases
@@ -63,17 +63,17 @@ class DSCDecoder:
         self.log = logging.getLogger("%s.%s" % (__name__, self.__class__.__name__))
 
         self.dscDB = DscDatabases(dscCfg)
-        self.dec = FSKDecoder(audioSrc=audioSrc, shiftFreq=SHIFTfrequency, bitRate=BITrate, lockMode=lockMode,centerFreq=centerFreq, tonesInverted=tonesInverted)
-        self.bits = self.dec.strYBY
-        self.msgFactory = DSCMessageFactory(bits=self.dec.strYBY, dscDB=self.dscDB)
+        self.dem = FSKDemodulator(audioSrc=audioSrc, shiftFreq=SHIFTfrequency, bitRate=BITrate, lockMode=lockMode,centerFreq=centerFreq, tonesInverted=tonesInverted)
+        self.bits = self.dem.strYBY
+        self.msgFactory = DSCMessageFactory(bits=self.dem.strYBY, dscDB=self.dscDB)
         self._event_emitter = AsyncIOEventEmitter()
 
     def setDebugLevel(self, dbgLvl:int):
         self.debugLevel = dbgLvl
-        self.dec.setDebugLevel(dbgLvl)
+        self.dem.setDebugLevel(dbgLvl)
 
     def setFreqBand(self, lowSearchf, highSearchf):
-        self.dec.setFreqBand(lowSearchf, highSearchf)
+        self.dem.setFreqBand(lowSearchf, highSearchf)
 
     def startDecoder(self):
         self.decoderHandlerThread = threading.Thread(target=self.decoderHandler, args=(True,), daemon=True)
@@ -119,10 +119,10 @@ class DSCDecoder:
 
         self.decoderHandlerRunning = startRunning
 
-        self.dec.startDecoder()
+        self.dem.startDemodulator()
         try:
             while (self.decoderHandlerRunning):
-                self.dec.setLockFreq(False)
+                self.dem.setLockFreq(False)
                 
                 self.log.debug(f"Searching for PhasingDX...",)
                 foundPhasing = self.findPhasing()
@@ -130,9 +130,7 @@ class DSCDecoder:
                     try:
                         self.log.debug(f"PhasingDX Found, processing Message")
 
-                        print(f"Bits Before: {self.bits.length()}")
                         self.debugMessageData()
-                        print(f"Bits After: {self.bits.length()}")
 
                         # Decode Message
                         msg = self.msgFactory.processMessage()
@@ -147,7 +145,7 @@ class DSCDecoder:
                 else:
                     self.log.debug(f"No PhasingDX Found....")
         finally:
-            self.dec.stopDecoder()
+            self.dem.stopDemodulator()
 
 
     def logValSymbols(self, startIdx: int):
@@ -204,7 +202,7 @@ class DSCDecoder:
                 
                 if (foundPossiblePhasing):
                     
-                    self.dec.setLockFreq(True)
+                    self.dem.setLockFreq(True)
 
                     # Check if we need to prepad strYBY so Computed MSG starts at a first DX Phasing sequence
                     padLen = 0
@@ -282,7 +280,7 @@ def main():
     dec.startDecoder()
     dec.decoderHandlerThread.join()
 
-    # print(f"DEBUG: Remaining strYBY - Len: [{len(self.dec.strYBY)}] - Data: [{"".join(self.dec.strYBY)}]")
+    # print(f"DEBUG: Remaining strYBY - Len: [{len(self.dem.strYBY)}] - Data: [{"".join(self.dem.strYBY)}]")
 
 
 if __name__ == "__main__":

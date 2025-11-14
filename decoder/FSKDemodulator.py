@@ -12,7 +12,7 @@ from pyventus.events import AsyncIOEventEmitter, EventEmitter, EventLinker
 from utils import TENunit, fromTENunit
 from audio.source import AudioSource, RawAudioSource
 from decoder.Bits import BitQueue
-from decoder.DSCEvents import FftUpdateEvent
+from decoder.DSCEvents import FftUpdateEvent, LogDscInfoEvent, LogDscResultEvent
 from collections import deque
 from time import sleep
 
@@ -30,7 +30,7 @@ SYNCFfactor = 0.03          # Average factor for frequency synchronisation curve
 FFTwindow = False           # [DEFAULT=False] FFTwindow applied if True
 ZEROpadding = 4             # [DEFAULT=4] Zero padding for extra FFT points
 
-class FSKDecoder:
+class FSKDemodulator:
     log: logging.Logger
     debugLevel:int = 0
 
@@ -40,8 +40,8 @@ class FSKDecoder:
     audioHandlerRunning:bool = False
     audioHandlerThread:threading.Thread
 
-    decoderHandlerRunning:bool = False
-    decoderHandlerThread:threading.Thread
+    demHandlerRunning:bool = False
+    demodHandlerThread:threading.Thread
 
     strYBY: BitQueue 
     markSym: str = "Y"
@@ -107,6 +107,14 @@ class FSKDecoder:
 
         self.updateFFTParams(lowSearchf, highSearchf)
 
+    def notifyLogInfo(self, txt:str):
+        e = LogDscInfoEvent(txt=txt)
+        self._event_emitter.emit(e)
+
+    def notifyLogResults(self, txt:str):
+        e = LogDscResultEvent(txt=txt)
+        self._event_emitter.emit(e)
+
     def invertTonesBits(self):
         if self.tonesInverted:
             tmp = self.bitY
@@ -125,9 +133,7 @@ class FSKDecoder:
         self.startSample = int(float(self.lowSearchf) / (sampleRate / (self.fftLength - 1)) + 0.5)
         self.stopSample = int(float(self.highSearchf) / (sampleRate / (self.fftLength - 1)) + 0.5)
         self.shiftSamples = int(float(self.shiftFreq) / (sampleRate / (self.fftLength - 1)) + 0.5)
-        # print(f"DEBUG: startSample: [{self.startSample}], stopSample: [{self.stopSample}], shiftSamples: [{self.shiftSamples}]")
 
-        # TODO: Review new "invert tones" switch to see if this needs updating 
         if (self.lck_mode == LM_AUTO):
             self.bitY = int(((self.lowSearchf + self.highSearchf - self.shiftFreq) / 2) / (sampleRate / (self.fftLength - 1)) - self.startSample + 0.5)
             self.bitB = self.bitY + self.shiftSamples
@@ -153,9 +159,11 @@ class FSKDecoder:
             try:
                 data = self.audioSrc.read(buffervalue)                    
                 self.audioSignalA.append(data)
-                # print(f"DEBUG: Audio Len: A: [{len(self.audioSignalA)}],  1: [{len(self.audioSignal1)}]")
+
             except Exception as e:
-                self.log.error(f"Audio buffer reset! {e}")
+                txt = f"Audio buffer reset! {e}"
+                self.log.error(txt)
+                self.notifyLogInfo(txt)
 
             sleep(WAIT_TIME_FOR_AUDIO)
 
@@ -181,36 +189,34 @@ class FSKDecoder:
     # Decoder Handler
     ########################################################################################################
 
-    def decoderHandler(self):
+    def demodulatorHandler(self):
         self.audioSignal1 = deque([])
-        while (self.decoderHandlerRunning):
+        while (self.demHandlerRunning):
             self.MakeYBY()
 
 
-    def startDecoder(self):
+    def startDemodulator(self):
         self.startAudioHandler();
         
-        self.decoderHandlerThread = threading.Thread(target=self.decoderHandler, args=(), daemon=True)
-        self.decoderHandlerRunning = True
-        self.decoderHandlerThread.start()
+        self.demodHandlerThread = threading.Thread(target=self.demodulatorHandler, args=(), daemon=True)
+        self.demHandlerRunning = True
+        self.demodHandlerThread.start()
 
-    def stopDecoder(self):
+    def stopDemodulator(self):
         self.stopAudioHandler();
 
-        self.decoderHandlerRunning = False
-        self.decoderHandlerThread.join(2.0)   # wait for the audio thread to complete
+        self.demHandlerRunning = False
+        self.demodHandlerThread.join(2.0)   # wait for the audio thread to complete
     
 
     # ============= Do an FFT =======================
     def DoFFT(self, FROMsample, Length):                              # Fast Fourier transformation and others like noise blanker and level for audio meter and time markers
-        #print(f"DEBUG: DoFFT() - FROMsample: [{FROMsample}], Length: [{Length}]")
         # Correction for Bandwidth of FFT window as samples left and right are suppressed by the window
         if FFTwindow:
             CF = 2.5                                            # Correction factor for Bandwidth of FFT window
             FROMsample = int(FROMsample - (Length * (CF - 1) / 2) + 0.5)
             Length = int(Length * CF + 0.5)
             
-        # print(f"DEBUG: B - {len(self.audioSignal1)}, FROMsample: [{FROMsample}], Length: [{Length}]")
         while len(self.audioSignal1) <= (FROMsample + Length + 1):   # If buffer too small, call the audio read routine
             if (len(self.audioSignalA) > 0):
                 self.audioSignal1.extend(self.audioSignalA.popleft())
@@ -222,8 +228,6 @@ class FSKDecoder:
         for n in range(FROMsample, FROMsample+Length):              # Take the Length samples from the stream
             fftSignal[fsi] = self.audioSignal1[n]
             fsi += 1
-
-        # print(f"DEBUG: audioSignal1 - [{len(self.audioSignal1)}]  fftSignal: [{len(fftSignal)}]")
 
         # Convert list to numpy array REX for faster Numpy calculations
         REX = numpy.array(fftSignal)                            # Make an array of the list
@@ -279,8 +283,6 @@ class FSKDecoder:
         else:
             self.syncTcntminus = self.syncTcntminus + 1
             
-        # print(f"DEBUG:  syncTcor: [{self.syncTcor}], syncTcntplus: [{self.syncTcntplus}], syncTcntminus: [{self.syncTcntminus}]")
-
         try:
             V = (VB - VY) / (VB + VY)
         except:
@@ -353,7 +355,7 @@ class FSKDecoder:
 
             # NIET: V = FFTresult[BitY] - FFTresult[BitB] - (Yref - Bref) / 2
             V = self.fftResult[self.bitY] - self.fftResult[self.bitB]
-            # print(f"DEBUG: V: [{V}],  bitY: [{self.fftResult[self.bitY]}], bitB: [{self.fftResult[self.bitB]}]")
+
             if (V > 0):
                 self.strYBY.append(self.markSym)               # Add "Y" for  1 for low tone
                 self.bitNew = self.markSym
@@ -366,17 +368,13 @@ class FSKDecoder:
             if self.bitNew != self.bitOld:
                 self.SyncTime()
 
-            # print(f"DEBUG: bitOld: [{self.bitOld}], bitNew: [{self.bitNew}] - BitY: [{self.bitY}]  BitB: [{self.bitB}]")
             self.bitOld = self.bitNew
 
             self.bitStepFrac = self.bitStepFrac + self.bitStep - int(self.bitStep)               # Fractional counter
             purgeNBits = int(self.bitStep + int(self.bitStepFrac) + self.syncTcor)
-            #print(f"DEBUG: purging [{purgeNBits}] Bits - ({self.bitStep, int(self.bitStepFrac)}, {self.syncTcor})")
-            l1 = len(self.audioSignal1)
             for n in range(0, purgeNBits):        # Delete the samples of a bit
                 self.audioSignal1.popleft()
-            l2 = len(self.audioSignal1)
-            # print(f"DEBUG: Audio Lens BP: [{l1}] AP: [{l2})]")
+
             self.bitStepFrac = self.bitStepFrac - int(self.bitStepFrac)                          # Only fractional part
             self.syncTcor = 0                                                                    # Reset SYNCTcor
 
@@ -395,18 +393,18 @@ class FSKDecoder:
 def main():
     audioSrc = RawAudioSource(src=sys.stdin.buffer, sampleRate=44100)
 
-    # dec = FSKDecoder(audioSrc, 170, 100, lockMode=LM_MANUAL, centerFreq=1700)
-    # dec = FSKDecoder(audioSrc, 170, 100, lockMode=LM_AUTO)
+    # dec = FSKDemodulator(audioSrc, 170, 100, lockMode=LM_MANUAL, centerFreq=1700)
+    # dec = FSKDemodulator(audioSrc, 170, 100, lockMode=LM_AUTO)
 
     # strange SigId Example GDMSS_2.mp3 - inverted
-    dec = FSKDecoder(audioSrc, 170, 100, lockMode=LM_AUTO, tonesInverted=True)
-    # dec = FSKDecoder(audioSrc, 170, 100, lockMode=LM_MANUAL, centerFreq=1700, tonesInverted=True)
+    dec = FSKDemodulator(audioSrc, 170, 100, lockMode=LM_AUTO, tonesInverted=True)
+    # dec = FSKDemodulator(audioSrc, 170, 100, lockMode=LM_MANUAL, centerFreq=1700, tonesInverted=True)
 
     # SELCALL 
-    # dec = FSKDecoder(audioSrc, 170, 100, lockMode=LM_AUTO, tonesInverted=True)
-    # dec = FSKDecoder(audioSrc, 170, 100, lockMode=LM_MANUAL, centerFreq=1800, tonesInverted=True)
+    # dec = FSKDemodulator(audioSrc, 170, 100, lockMode=LM_AUTO, tonesInverted=True)
+    # dec = FSKDemodulator(audioSrc, 170, 100, lockMode=LM_MANUAL, centerFreq=1800, tonesInverted=True)
 
-    dec.startDecoder()
+    dec.startDemodulator()
 
     cnt = 0
     ps = -1;
@@ -421,7 +419,7 @@ def main():
         cnt += 1
 
     print(f"DEBUG: strYBY - Len: [{dec.strYBY.length()}] - Data: [{dec.strYBY.toString()}]")
-    dec.stopDecoder()
+    dec.stopDemodulator()
 
 
 if __name__ == "__main__":

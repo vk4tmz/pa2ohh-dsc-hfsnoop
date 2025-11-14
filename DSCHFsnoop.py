@@ -10,6 +10,7 @@ import pyaudio
 import shutil
 
 from tkinter import *
+from tkinter import messagebox
 from tkinter import simpledialog
 
 from pyventus.events import EventLinker
@@ -66,20 +67,34 @@ def Bstart():
     if (RUNstatus == 0):
         RUNstatus = 1
 
-        # Start Decoder Handler
-        #dscDec = DSCDecoder(audioSrc, lockMode=LM_MANUAL, centerFreq=1700)
-        dscDec = DSCDecoder(AUDIOsrc, dscCfg, lockMode=LM_AUTO)
-        dscDec.setDebugLevel(DEBUG)
-        dscDec.setFreqBand(LOWsearchf, HIGHsearchf)
-        dscDec.startDecoder()
-
         text1.delete(1.0, END)  # Delete Info screen
-        Initialize()
+        
+        try:
+            # Start Decoder Handler
+            #dscDec = DSCDecoder(audioSrc, lockMode=LM_MANUAL, centerFreq=1700)
+            dscDec = DSCDecoder(AUDIOsrc, dscCfg, lockMode=LM_AUTO)
+            dscDec.setDebugLevel(DEBUG)
+            dscDec.setFreqBand(LOWsearchf, HIGHsearchf)
+            dscDec.startDecoder()
+
+            txt = "Decoding has started. Using Sample rate: " + str(dscCfg.sampleRate) + " samples/s"
+            PrintInfo(txt)
+            
+            Initialize()
+        except Exception as e:
+            txt = f"Failed to start decoder. {e}"
+            PrintInfo(txt)
+            messagebox.showerror("Error", txt)
+
     else:
         if (RUNstatus == 1):
             RUNstatus = 0
-        if (RUNstatus == 2 or RUNstatus == 4):
-            RUNstatus = 3
+            try:
+                dscDec.stopDecoder()
+            except Exception as e:
+                txt = f"Error while attempting to stop decoder. {e}"
+                PrintInfo(txt)
+                messagebox.showerror("Error", txt)
 
     Buttontext()            # Set colors and text of buttons
 
@@ -197,7 +212,7 @@ def MAINloop():             # The Mainloop
     root.after(100, check_queue)
     root.mainloop();
 
-    dscDec.startDecoder
+    dscDec.stopDecoder()
 
 
 # ================= Select an audio device =======================
@@ -344,7 +359,7 @@ def DrawSpectrum(e:FftUpdateEvent):
 
     # Synchronisation level bottom
     Sline = []
-    if dscDec.dec.isLockFreq:
+    if dscDec.dem.isLockFreq:
         x = dscCfg.saMargin + dscCfg.saX / 2 + e.syncTmin * dscCfg.saX / 2
         y = dscCfg.saY - dscCfg.saMargin / 2
         Sline.append(x)
@@ -362,7 +377,7 @@ def DrawSpectrum(e:FftUpdateEvent):
         e.syncTcntminus = int(e.syncTcntminus * R / P)
 
     SCline = []
-    if dscDec.dec.isLockFreq:
+    if dscDec.dem.isLockFreq:
         if (e.syncTcntplus + e.syncTcntminus) >= 5:   # Only if >= than 5
             V = e.syncTcntplus / (e.syncTcntplus + e.syncTcntminus)
         else:                                   # Otherwise set to center = 0.5

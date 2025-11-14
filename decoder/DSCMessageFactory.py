@@ -1,9 +1,6 @@
 
 import logging
-import sys
 
-
-from decoder.FSKDecoder import FSKDecoder
 from utils import getMsgVal
 from decoder.DSCMessage import DscMessage, DscSelectiveGeographicAreaMsg, DscDistressAlertMsg,\
             DscRoutineGroupCallMsg, DscAllShipCallMsg, DscSelectiveIndividualCallMsg,\

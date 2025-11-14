@@ -19,7 +19,7 @@ The Commands syntax / options are:
 
 ```
 $ python DSCHFsnoop.py -h
-usage: DSCHFsnoop.py [-h] [-as {alsa,-}] [-sr {11025,22050,44100}] [-dd DATA_DIR] freq_hz
+usage: DSCHFsnoop.py [-h] [-as {alsa,-}] [-sr {11025,22050,44100}] [-dd DATA_DIR] [-inv] freq_hz
 
 MF-HF-DSC Decoder
 
@@ -34,6 +34,8 @@ options:
                         Audio sample.
   -dd DATA_DIR, --data-dir DATA_DIR
                         Root level for data files.
+  -inv, --invert-tones  Invert Marker(Y) / Space(B) Tones.
+
 ```
 
 You need to at minimum specify the **frequency** in Hz. Is is require to ensure when we are running multiple instance we can tell which window is which.  The value for frequency can be any number its currently not being validated.
@@ -165,3 +167,11 @@ Run the following shell script:
 ```
 ./download_latest_yadd_mmsi_files.sh
 ```
+
+# Code Refactoring Completed
+
+PA2OHH's original code for "DSC HF/MF Decoder" was all contained in a single python file with ~3200 lines of code (see [DSCHFsnoop-v02c.py](https://github.com/vk4tmz/pa2ohh-dsc-hfsnoop/blob/pa2ohh_orig_v0.2c/DSCHFsnoop-v02c.py)).  I've just completed the OO refactoring exercise to separate logic out into relevant classes such as (**FSKDemodulator**, **DscDecoder**, **DscMessage** (_several sub classes and many helper classes_)). As part of this refactoring did my best to remove any tight coupling between UI and these newer classes and utilising '[Pyventus](https://github.com/mdapena/pyventus)', and even-driven paradigm framework, allowing the FSKDemodulator and DSCDecoder classes to communicate with the UI using events.
+
+With this now done my next 2 goal to complete are:
+* Add **'--no-gui'** option to allow the application to run without displaying the UI and hence allowing the logic to run in the background.
+* Add **[LandMobile Selcall CCIR 493-4/6 Decoder](https://hflink.com/selcall/)**. I can already run the FSKDemodulator against Selcall example wav files and it will lock on and demodulate the signal producing valid bit stream. This will allow me to monitor known Amateur Radio aswell as Civilian 4x4 & other Outback (Flying Doctor) frequecies were Selcall messages are transmitting.

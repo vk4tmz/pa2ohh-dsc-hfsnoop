@@ -72,7 +72,7 @@ def Bstart():
         try:
             # Start Decoder Handler
             #dscDec = DSCDecoder(audioSrc, lockMode=LM_MANUAL, centerFreq=1700)
-            dscDec = DSCDecoder(AUDIOsrc, dscCfg, lockMode=LM_AUTO)
+            dscDec = DSCDecoder(AUDIOsrc, dscCfg, lockMode=LM_AUTO, tonesInverted=dscCfg.invertTones)
             dscDec.setDebugLevel(DEBUG)
             dscDec.setFreqBand(LOWsearchf, HIGHsearchf)
             dscDec.startDecoder()

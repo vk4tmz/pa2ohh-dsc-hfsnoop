@@ -72,9 +72,6 @@ class DscConfig:
         self.sampleRate = sampleRate
         
         self.invertTones = invertTones
-        if (invertTones):
-            self.markSym = "B"
-            self.spaceSym = "Y"
 
         self.freqDataDir = f"{self.dataDir}/{self.freqRxHz}"
         

@@ -89,9 +89,9 @@ class DSCMessageFactory:
             return False
         
         return True
-
-    def processMessage(self): 
     
+    def processMessage(self):      
+
         # ... Check if the double transmission of the format specifier is identical ...
         fs1 = -1                # The 1st format specifier
         fs2 = -1                # The 2nd format specifier

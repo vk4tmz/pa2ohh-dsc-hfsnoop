@@ -8,9 +8,11 @@ import threading
 sys.path.insert(0, '..')
 sys.path.insert(0, '.')
 
+from pyventus.events import AsyncIOEventEmitter, EventEmitter, EventLinker
 from utils import TENunit, fromTENunit
 from audio.source import AudioSource, RawAudioSource
 from decoder.Bits import BitQueue
+from decoder.DSCEvents import FftUpdateEvent
 from collections import deque
 from time import sleep
 
@@ -30,6 +32,7 @@ ZEROpadding = 4             # [DEFAULT=4] Zero padding for extra FFT points
 
 class FSKDecoder:
     log: logging.Logger
+    debugLevel:int = 0
 
     audioSrc: AudioSource
     audioSignalA:deque
@@ -49,8 +52,8 @@ class FSKDecoder:
     bitStep:float = 0.0
     bitStepFrac:float = 0.0
 
-    fftResult = []
-    fftAverage = []
+    fftResult: numpy.ndarray = numpy.empty(0)
+    fftAverage: numpy.ndarray = numpy.empty(0)
     fftLength:int = 0
     lowSearchf:int = 400
     highSearchf:int = 2400
@@ -58,6 +61,9 @@ class FSKDecoder:
     startSample:int = 0
     stopSample:int = 0
     shiftSamples:int = 0
+
+    bitY: int
+    bitB: int
 
     syncTcor = 0                # Correction for time synchronisation in samples
     syncTmin = 1.0              # Minimum correction value RESET TO +1.0                       
@@ -77,6 +83,8 @@ class FSKDecoder:
 
     framecnt=0
 
+    _event_emitter:EventEmitter
+
     def __init__(self, audioSrc:AudioSource, shiftFreq: int, bitRate: float, lockMode:str="A", centerFreq:int=1700, tonesInverted:bool=False):
         self.log = logging.getLogger("%s.%s" % (__name__, self.__class__.__name__))
         self.audioSrc = audioSrc
@@ -85,9 +93,19 @@ class FSKDecoder:
         self.lck_mode = lockMode
         self.lck_centerFreq = centerFreq
         self.tonesInverted = tonesInverted
+        self._event_emitter = AsyncIOEventEmitter()
 
         self.strYBY = BitQueue()
         self.updateFFTParams(400, 2400)
+
+    def setDebugLevel(self, dbgLvl:int):
+        self.debugLevel = dbgLvl
+
+    def setFreqBand(self, lowSearchf, highSearchf):
+        self.lowSearchf = lowSearchf
+        self.highSearchf = highSearchf
+
+        self.updateFFTParams(lowSearchf, highSearchf)
 
     def invertTonesBits(self):
         if self.tonesInverted:
@@ -273,6 +291,23 @@ class FSKDecoder:
         if V < self.syncTmin:
             self.syncTmin = V
 
+    def postFftpUpdateEvent(self):
+        # Audio level right vertical line
+        audioLo = numpy.amin(self.audioSignal1)
+        audioLo = abs(audioLo)
+        audioHi = numpy.amax(self.audioSignal1)
+        if audioLo > audioHi:
+            audioHi = audioLo
+
+        self._event_emitter.emit(
+            FftUpdateEvent(self.fftResult, self.fftAverage, self.bitY, self.bitB, self.audioSrc.available(), 
+                           audioLo, audioHi, self.syncTmin, self.syncTmax,
+                           self.syncTcntminus, self.syncTcntplus))
+        
+        # Once FFTUpdate Event Sent Reset 
+        self.syncTmin = +1.0
+        self.syncTmax = -1.0
+
     # ============= Frequency synchronisation =======================
     def SyncFreq(self):
 
@@ -286,7 +321,7 @@ class FSKDecoder:
         if (self.lck_mode == LM_MANUAL) or self.isLockFreq:          # Only continue if (find phasing)
             return
     
-        B = numpy.argmax(self.fftAverage)                            # Find the sample number with the maximum
+        B = int(numpy.argmax(self.fftAverage))                            # Find the sample number with the maximum
 
         if B < self.shiftSamples:
             self.bitY = B
@@ -346,6 +381,9 @@ class FSKDecoder:
             self.syncTcor = 0                                                                    # Reset SYNCTcor
 
             AddYBY = AddYBY + 1
+
+        # Update UI
+        self.postFftpUpdateEvent()
     
     def setLockFreq(self, isLocked:bool):
         self.isLockFreq = isLocked

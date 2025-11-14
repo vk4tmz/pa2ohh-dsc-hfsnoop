@@ -1,15 +1,20 @@
 import logging
 import sys
-
+import threading
 
 sys.path.insert(0, '..')
 sys.path.insert(0, '.')
 
+
+from enum import Enum
+from pyventus.events import AsyncIOEventEmitter, EventEmitter, EventLinker
 from utils import TENunit, fromTENunit
+
 from audio.source import AudioSource, RawAudioSource
 from decoder.Bits import BitQueue
 from decoder.FSKDecoder import FSKDecoder, LM_AUTO, LM_MANUAL
 from decoder.DSCMessageFactory import DSCMessageFactory
+from decoder.DSCEvents import NewDscMessageEvent, LogDscInfoEvent, LogDscResultEvent
 
 from DSCConfig import DscConfig
 from db.DSCDatabases import DscDatabases
@@ -28,6 +33,16 @@ HLINE = "==================================="       # Message separation line
 
 logging.basicConfig(level=logging.DEBUG)
 
+
+@EventLinker.on(NewDscMessageEvent)
+def printNewMessage(e:NewDscMessageEvent):
+    out = []
+    e.msg.print(out)
+    print(HLINE)
+    for ln in out:
+        print(ln)
+
+
 class DSCDecoder:
 
     dec: FSKDecoder
@@ -35,7 +50,14 @@ class DSCDecoder:
     dscCfg: DscConfig
     dscDB: DscDatabases
     msgFactory: DSCMessageFactory
+
     log: logging.Logger
+    debugLevel = 0;
+
+    decoderHandlerRunning: bool = False
+    decoderHandlerThread:threading.Thread
+
+    _event_emitter:EventEmitter
 
     def __init__(self, audioSrc:AudioSource, dscCfg: DscConfig, lockMode:str="A", centerFreq:int=1700, tonesInverted:bool=False):
         self.log = logging.getLogger("%s.%s" % (__name__, self.__class__.__name__))
@@ -44,36 +66,88 @@ class DSCDecoder:
         self.dec = FSKDecoder(audioSrc=audioSrc, shiftFreq=SHIFTfrequency, bitRate=BITrate, lockMode=lockMode,centerFreq=centerFreq, tonesInverted=tonesInverted)
         self.bits = self.dec.strYBY
         self.msgFactory = DSCMessageFactory(bits=self.dec.strYBY, dscDB=self.dscDB)
+        self._event_emitter = AsyncIOEventEmitter()
+
+    def setDebugLevel(self, dbgLvl:int):
+        self.debugLevel = dbgLvl
+        self.dec.setDebugLevel(dbgLvl)
+
+    def setFreqBand(self, lowSearchf, highSearchf):
+        self.dec.setFreqBand(lowSearchf, highSearchf)
 
     def startDecoder(self):
-        # TODO: Thread this
+        self.decoderHandlerThread = threading.Thread(target=self.decoderHandler, args=(True,), daemon=True)
+        self.decoderHandlerThread.start()
+
+    def stopDecoder(self):
+        self.decoderHandlerRunning = False
+        self.decoderHandlerThread.join(2.0)   # wait for the audio thread to complete
+
+    def notifyLogInfo(self, txt:str):
+        e = LogDscInfoEvent(txt=txt)
+        self._event_emitter.emit(e)
+
+    def notifyLogResults(self, txt:str):
+        e = LogDscResultEvent(txt=txt)
+        self._event_emitter.emit(e)
+
+    def debugMessageData(self):
+        if self.debugLevel > 1:
+            txt = f"{HLINE}\n"
+            txt += f"=== DEBUG DATA message ===\n"
+            txt += f"Message found: \n"
+    
+            errCnt = 0
+            msgVals = ""
+            i = 1
+            while errCnt < 5:                                    # Print data till 5 errors
+                v = self.bits.getValSymbol(0, i)                      
+                msgVals += f"({v})"
+                if i >= 16:                                         # End of phasing and start of data
+                    if v < 0:
+                        errCnt = errCnt + 1
+                i = i + 1
+
+            txt += msgVals
+            self.notifyLogResults(txt)
+
+
+    def decoderHandler(self, startRunning:bool):
+        
+        if (self.decoderHandlerRunning):
+            self.log.warning("DSCDecoder process is already running...")
+
+        self.decoderHandlerRunning = startRunning
+
         self.dec.startDecoder()
+        try:
+            while (self.decoderHandlerRunning):
+                self.dec.setLockFreq(False)
+                
+                self.log.debug(f"Searching for PhasingDX...",)
+                foundPhasing = self.findPhasing()
+                if foundPhasing:
+                    try:
+                        self.log.debug(f"PhasingDX Found, processing Message")
 
-        while (True):
-            self.dec.setLockFreq(False)
-            
-            self.log.debug(f"Searching for PhasingDX...",)
-            foundPhasing = self.findPhasing()
-            if foundPhasing:
-                try:
-                    self.log.debug(f"PhasingDX Found, processing Message")
+                        print(f"Bits Before: {self.bits.length()}")
+                        self.debugMessageData()
+                        print(f"Bits After: {self.bits.length()}")
 
-                    # Decode Message
-                    msg = self.msgFactory.processMessage()
+                        # Decode Message
+                        msg = self.msgFactory.processMessage()
 
-                    # TODO: Testing Logging of decoded msg. remove once returned msg has been queued and/or  we notify subscribers.s
-                    if msg:
-                        out = []
-                        msg.print(out)
-                        self.log.info(HLINE)
-                        for ln in out:
-                            self.log.info(ln)
+                        if msg:
+                            e = NewDscMessageEvent(msg=msg)
+                            self._event_emitter.emit(e)
 
-                finally:
-                    # Remove bits of at min the Phasing Sequence, to ensure all clear for next Phasing scan.
-                    self.bits.removeBits(DXRX_PHASING_BIT_LEN+20)
-            else:
-                self.log.debug(f"No PhasingDX Found....")
+                    finally:
+                        # Remove bits of at min the Phasing Sequence, to ensure all clear for next Phasing scan.
+                        self.bits.removeBits(DXRX_PHASING_BIT_LEN+20)
+                else:
+                    self.log.debug(f"No PhasingDX Found....")
+        finally:
+            self.dec.stopDecoder()
 
 
     def logValSymbols(self, startIdx: int):
@@ -95,6 +169,7 @@ class DSCDecoder:
 
             self.log.debug(strDATA)
             self.log.debug(HLINE)        
+    
 
     # ============= Find the phasing signal and the start of the message MSG =======================
     def findPhasing(self):
@@ -103,19 +178,11 @@ class DSCDecoder:
         MinBits = 30                            # The search bits in the YBY string  30 bits enough to confirm possible (RX, DX, RX )
         Starti = 0                              # Start to search from this pointer, so that the data before this pointer can also be read
             
-        # if MSGstatus == 3:                                # Start of new search, skip the old part upto the format specifier
-        #     strYBY = strYBY[(MSG+DXRX_PHASING_BIT_LEN):]  # Discard last Phasing Sequence. Ready for next search of phasing signal of 120 bits
-        #     FFTaverage = FFTresult                        # Reset FFTaverage for new search
-        #     MSGstatus = 0                                 # And set the status to search
-
         self.bits.waitForBits(MinBits)
                 
         # Phasing is [125][111], [125][110] .. [125][105]
         #  Original logic only looked for the match on RX value 108 or 107, which could allow for missed decodes if 
-        #  these bytes were corrupted. We should actually look for any Phase [125] plus a value from between 105 and 111. 
-        #  
-        #   se1 = TENunit(108) + TENunit(125)       # Define search string 1 for phasing
-        #   se2 = TENunit(107) + TENunit(125)       # Define search string 2 for phasing
+        #  these bytes were corrupted. We should actually look for any Phase [125] plus a value from between 105 and 111.
     
         i = Starti
         L = self.bits.length()
@@ -192,9 +259,6 @@ class DSCDecoder:
                         self.bits.removeBits(padLen)
 
             i = i + 1
-
-        # TODO: Migrate this
-        # FileHandling()
         
         # Process the processed L BITS up, to clear them out from next Phasing Scan
         self.bits.removeBits(L)
@@ -216,6 +280,7 @@ def main():
     # dec = DSCDecoder(audioSrc, dscCfg, lockMode=LM_AUTO, tonesInverted=True)
     
     dec.startDecoder()
+    dec.decoderHandlerThread.join()
 
     # print(f"DEBUG: Remaining strYBY - Len: [{len(self.dec.strYBY)}] - Data: [{"".join(self.dec.strYBY)}]")
 

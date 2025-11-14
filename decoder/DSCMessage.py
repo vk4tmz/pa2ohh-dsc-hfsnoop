@@ -86,6 +86,10 @@ class DscMessage(metaclass=ABCMeta):
     expMsgData: list
     expMsgs: list[DscExpansionMessage]
 
+    isTestMsg: bool = False
+    isSpecialMsg: bool = False
+    canLogPosition: bool = False
+
     def __init__(self, fmtSpecId: int, fmtSpecDesc: str, msgData:list, expMsgData:list, dscDB:DscDatabases) -> None:
         self.log = logging.getLogger("%s.%s" % (__name__, self.__class__.__name__))
         self.fmtSpecId = fmtSpecId
@@ -234,59 +238,73 @@ class DscMmsi:
     callsign:str
     isSelfId : bool
 
+    coastIndex:int = -1
+    shipIndex:int = -1
+    mids:str
+
     def __init__(self, msgData:list, idx:int, isSelfId: bool, dscDB: DscDatabases) -> None:
         self.log = logging.getLogger("%s.%s" % (__name__, self.__class__.__name__))
         self.msgData = msgData[idx:idx+5]
-        self.callsign = getMsgPaddedVals(msgData, idx, 5)
         self.isSelfId = isSelfId
         self.dscDB = dscDB
         self.dscCfg = dscDB.dscCfg
 
-    def mids(self, id:int) -> str:
+        callsign = getMsgPaddedVals(msgData, idx, 5)
+            
+        if callsign[-1:] != "0":
+            self.log.warning(f"ERROR! MMSI [{callsign}] SHOULD END WITH A ZERO")
+            
+        # dicard the last digit as only need 9 for MMSI
+        self.callsign = callsign[0:9]
+
+        self.isIndividual = callsign[0:1] != "0"
+        if (self.isIndividual):
+            self.countryCode = int(callsign[0:3])
+
+        self.isGroup = callsign[0:1] == "0" and callsign[1:2] != "0"
+        if (self.isGroup):
+            self.countryCode = int(callsign[1:4])
+
+        self.isCoast = callsign[0:1] == "0" and callsign[1:2] == "0"
+        if (self.isCoast):
+            self.countryCode = int(callsign[2:5])
+
+        self.mids = self.midsLookup(self.countryCode)
+
+        if self.isSelfId:                          # Self ID station that transmits if True
+            self.coastIndex = self.dscDB.coastDB.lookup(self.callsign, self.dscDB.midsDB.lookup(self.countryCode), False)   # Might be a Coast station with a "normal" MMSI in the COAST Data base
+            if self.coastIndex == -1:                    # No match in the COAST data base
+                self.shipIndex = self.dscDB.shipDB.lookup(self.callsign, self.dscDB.midsDB.lookup(self.countryCode), True)  # Is a "normal" ship MMSI, perhaps in the SHIP data base, Always save
+
+             
+
+    def midsLookup(self, id:int) -> str:
         return self.dscDB.midsDB.lookup(id)
 
     def print(self, pretext:str, out: list) -> None:
-# ... Decode an MMSI address ...        
-        COASTindex = -1
-        SHIPindex = -1
-            
+           
         callsign = self.callsign
-        callsign9 = self.callsign[0:9]
+        countryCode = self.countryCode
         coastDB = self.dscDB.coastDB
         shipDB = self.dscDB.shipDB
 
-        if callsign[-1:] != "0":
-            out.append(f"{pretext} ERROR! MMSI [{callsign}] SHOULD END WITH A ZERO")
-            return
-
-        if callsign[0:1] != "0":                            # INDIVIDUAL
-            x = int(callsign[0:3])
-            out.append(f"{pretext} {callsign9} INDIVIDUAL CC{callsign[0:3]} [" + self.mids(x) + "]")
-
-            if self.isSelfId:                          # Self ID station that transmits if True
-                COASTindex = coastDB.lookup(callsign9, self.mids(x), False)    # Might be a Coast station with a "normal" MMSI in the COAST Data base
-                if COASTindex == -1:                    # No match in the COAST data base
-                    SHIPindex = shipDB.lookup(callsign9, self.mids(x), True)  # Is a "normal" ship MMSI, perhaps in the SHIP data base, Always save
-
-                    # TODO: Do we need to handle this or can it go ??
-                    POSmmsi = callsign9             # Callsign for possible position saving
+        if self.isIndividual:  # INDIVIDUAL
+            out.append(f"{pretext} {callsign} INDIVIDUAL CC{countryCode} [{self.mids}]")
         
-        if callsign[0:1] == "0" and callsign[1:2] != "0":   # GROUP
-            x = int(callsign[1:4])
-            out.append(f"{pretext} {callsign9} GROUP CC{callsign[1:4]} [{self.mids(x)}]")
+        if self.isGroup:       # GROUP
+            out.append(f"{pretext} {callsign} GROUP CC{countryCode} [{self.mids}]")
         
-        if callsign[0:1] == "0" and callsign[1:2] == "0":   # COAST
-            x = int(callsign[2:5])
-            out.append(f"{pretext} {callsign9} COAST CC{callsign[2:5]} [{self.mids(x)}]")
-            if self.isSelfId == True:                          # Self ID station that transmits if True
-                COASTindex = coastDB.lookup(callsign, self.mids(x), True)     # Check the COAST data base and True=ALWAYS save
-                if COASTindex == -1:                    # NOT a match!
-                    out.append(f"{pretext} Unknown Coast station: {callsign9}")
+        if self.isCoast:       # COAST
+            out.append(f"{pretext} {callsign} COAST CC{countryCode} [{self.mids}]")
+            
+            if self.isSelfId == True:                                           # Self ID station that transmits if True
+                if self.coastIndex == -1:                                       # NOT a match!
+                    out.append(f"{pretext} Unknown Coast station: {callsign}")
 
-        if COASTindex != -1:                            # A match in the COAST data base
-            out.append(f"INFO-DB: [{coastDB.COASTname[COASTindex]}  {coastDB.COASTlat[COASTindex]} {coastDB.COASTlon[COASTindex]}]")
-        if SHIPindex != -1:
-            out.append(f"INFO-DB: [{shipDB.SHIPinfo[SHIPindex]}]")
+        if self.coastIndex != -1:                            # A match in the COAST data base
+            out.append(f"INFO-DB: [{coastDB.COASTname[self.coastIndex]}  {coastDB.COASTlat[self.coastIndex]} {coastDB.COASTlon[self.coastIndex]}]")
+        if self.shipIndex != -1:
+            out.append(f"INFO-DB: [{shipDB.SHIPinfo[self.shipIndex]}]")
         
 
 class DscPosition:
@@ -588,9 +606,6 @@ class DscSelectiveGeographicAreaMsg(DscMessage):
 
         self.eos = DscEndOfSequence(getMsgVal(msgData, len(msgData) - 2))
 
-        # TODO: Need to handle detectng invalid message (ie excepion for scan each of the possible fields for a status flag ?)
-        # MSGstatus = 3       # Continue with the next search, messages have been decoded
-
     def print(self, out: list):
         super().print(out)
 
@@ -627,6 +642,7 @@ class DscDistressAlertMsg(DscMessage):
     selfId: DscMmsi
     nod: DscNatureOfDistress
     pos: DscPosition
+    timeUtc: DscUtcTime
     subComm: DscTeleCommand1
     freqRx: DscFrequency
     freqTx: DscFrequency
@@ -636,9 +652,8 @@ class DscDistressAlertMsg(DscMessage):
     def __init__(self, msgData:list, expMsgData:list, dscDB:DscDatabases) -> None:
         super().__init__(112, "Distress", msgData, expMsgData, dscDB)
         self.log = logging.getLogger("%s.%s" % (__name__, self.__class__.__name__))
-
-        # TODO: Need to ensure UI is notified
-        #SPECIAL()           # Special message
+        
+        self.isSpecialMsg = True         # Special message
 
         self.selfId = DscMmsi(msgData, 1, False, self.dscDB)
         self.nod = DscNatureOfDistress(getMsgVal(msgData, 6))
@@ -653,7 +668,6 @@ class DscDistressAlertMsg(DscMessage):
     def print(self, out: list):
         super().print(out)
         
-        # TODO: original logic use "DIST-ID" as pretext ? but spec clearly calls this field "SELF-ID"
         self.selfId.print("SELF-ID:", out)
         self.nod.print(out)
         self.pos.print(out)
@@ -675,9 +689,15 @@ class DscRoutineGroupCallMsg(DscMessage):
     cat: DscCategory
     selfId: DscMmsi
     tc1: DscTeleCommand1
+
     tc2: DscTeleCommand2
     freqRx: DscFrequency
     freqTx: DscFrequency
+
+    nod: DscNatureOfDistress
+    pos: DscPosition
+    timeUtc: DscUtcTime
+    subComm: DscTeleCommand1
 
     eos: DscEndOfSequence
 
@@ -691,9 +711,13 @@ class DscRoutineGroupCallMsg(DscMessage):
         self.tc1 = DscTeleCommand1(getMsgVal(msgData, 12))
 
         match self.cat.catId:
-            case 112:                   # Distress Alert Relay Ack
-                # TODO: Only for VHF so to be done in future
-                self.log.warning("VHF - Distress Alert Relay Ack not currently not handled.")
+            case 112:                   # Distress Alert Relay Ack (VHF)
+                # TODO: Only for VHF - Handling recently added in needs to be tested.
+                self.log.warning("VHF - Distress Alert Relay Ack - Handling recently added in needs to be tested.")
+                self.nod = DscNatureOfDistress(getMsgVal(msgData, 13))
+                self.pos = DscPosition(msgData, 14)
+                self.timeUtc = DscUtcTime(msgData, 19)
+                self.subComm = DscTeleCommand1(getMsgVal(msgData, 21))
                 pass
             case 100:
                 self.tc2 = DscTeleCommand2(getMsgVal(msgData, 13))
@@ -717,9 +741,12 @@ class DscRoutineGroupCallMsg(DscMessage):
 
         match self.cat.catId:
             case 112:                   # Distress Alert Relay Ack - VHF
-                # TODO: Only for VHF so to be done in future
-                self.log.warning("VHF - Distress Alert Relay Ack not currently not handled.")
-                pass
+                # TODO: Only for VHF - Handling recently added in needs to be tested.
+                self.log.warning("VHF - Distress Alert Relay Ack - Handling recently added in needs to be tested.")
+                self.nod.print(out)
+                self.pos.print(out)
+                self.timeUtc.print(out)
+                self.subComm.print(out);
             case 100:
                 self.tc2.print(out)
                 self.freqRx.print("FREQ-RX:", out)
@@ -811,8 +838,6 @@ class DscAllShipCallMsg(DscMessage):
 
 class DscSelectiveIndividualCallMsg(DscMessage):
 
-    isTestMsg: bool = False
-
     cat: DscCategory
     selfId: DscMmsi
     distId: DscMmsi
@@ -842,10 +867,8 @@ class DscSelectiveIndividualCallMsg(DscMessage):
                 self.tc2 = DscTeleCommand2(getMsgVal(msgData, 13))
                 if getMsgVal(msgData, 14) == 55:                   # Position update 1st frequency symbol=55
                     self.pos = DscPosition(msgData, 15)
+                    self.canLogPosition = True
                     
-                    # TODO: Need to refactor the SAVEpos() logic
-                    # SAVEpos()                           # Save the ship position
-
                     if getMsgVal(msgData, 20) < 100:               # No EOS but time
                         self.utcTime = DscUtcTime(msgData, 20)
 
@@ -871,9 +894,7 @@ class DscSelectiveIndividualCallMsg(DscMessage):
 
                 if getMsgVal(msgData, 14) == 55:                   # Position update 1st frequency symbol=55
                     self.pos = DscPosition(msgData, 15)
-                    
-                    # TODO: Need to refactor the SAVEpos() logic
-                    # SAVEpos()                           # Save the ship position
+                    self.canLogPosition = True
 
                     if getMsgVal(msgData, 20) < 100:               # No EOS but time
                         self.utcTime = DscUtcTime(msgData, 20)

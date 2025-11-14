@@ -1,7 +1,7 @@
 
 import logging
 
-from utils import getMsgVal
+from utils import getMsgVal, writeStringToFile, getTimeStamp
 from decoder.DSCMessage import DscMessage, DscSelectiveGeographicAreaMsg, DscDistressAlertMsg,\
             DscRoutineGroupCallMsg, DscAllShipCallMsg, DscSelectiveIndividualCallMsg,\
             DscSelectiveIndividualAutomaticCallMsg
@@ -157,9 +157,16 @@ class DSCMessageFactory:
 
     # ============================ Select the decoder depending on the Format specifier ==============================
 
+    def recordMsgsData(self, fmtSpecId:int, msgData: list, expMsgData: list):
+        writeStringToFile(f"{self.dscDB.dscCfg.freqDataDir}/msgdata_tests.txt",
+                          f"{fmtSpecId}|{msgData}|{expMsgData}|{getTimeStamp()}", append=True)
+
     def selectMessageDecoder(self, msgData, expMsgData) -> DscMessage | None:
         
         fmtSpecId = getMsgVal(msgData, 0)
+
+        # TODO: Log msgData and expMsgData for later testing purchases.
+        self.recordMsgsData(fmtSpecId, msgData, expMsgData)
 
         self.log.debug(f"FSID: [{fmtSpecId}],  msgData: [{msgData}],  expMsgData: [{expMsgData}]")
 

@@ -1,23 +1,8 @@
 
 from utils import makedirs
+from logfile import LogFile
 
 import logging
-
-
-class LogFile:
-    title:str
-    filename:str
-    dirname:str
-
-    def __init__(self, title:str, filename:str, dirname: str):
-        self.title=title
-        self.filename=filename
-        self.dirname=dirname
-        makedirs(dirname);
-    
-    def getFullPath(self):
-        return f"{self.dirname}/{self.filename}"
-
 
 class DscConfig:
 
@@ -65,13 +50,13 @@ class DscConfig:
 
     ensureFormatSpecifiersSame:bool = False  # ITU Spec - 4.2 Specifiers (112, 116 & 114) should have the value for both Format Specifier message fields.
 
-    def __init__(self, dataDir:str, freqRxHz:int, sampleRate:int, invertTones:bool=False):
+    def __init__(self, dataDir:str, freqRxHz:int, sampleRate:int, invertTones:bool=False, freqBand:int=0):
         self.log = logging.getLogger("%s.%s" % (__name__, self.__class__.__name__))
         self.dataDir = dataDir
         self.freqRxHz = freqRxHz 
         self.sampleRate = sampleRate
-        
         self.invertTones = invertTones
+        self.freqBand = freqBand
 
         self.freqDataDir = f"{self.dataDir}/{self.freqRxHz}"
         

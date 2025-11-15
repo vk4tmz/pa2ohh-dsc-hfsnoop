@@ -10,6 +10,7 @@ from time import sleep
 from utils import fromTENunit
 
 WAIT_TIME_FOR_BITS  = 0.025
+WAIT_LOOP_FOR_BITS  = 20    # ~0.5sec we should have had data
 
 class BitQueue:
     
@@ -23,9 +24,15 @@ class BitQueue:
     def availableBits(self):
         return len(self.bits)
 
-    def waitForBits(self, minBits:int):
+    def waitForBits(self, minBits:int) -> bool:
+        cnt = 0;
         while len(self.bits) < minBits:
             sleep(WAIT_TIME_FOR_BITS)
+            cnt += 1
+            if (cnt >= WAIT_LOOP_FOR_BITS):
+                return False
+            
+        return True
 
     def padBits(self, numBits):
         self.log.debug(f"Pre-padding bit buffer with {numBits} Y's....")
@@ -33,7 +40,8 @@ class BitQueue:
         self.bits.extendleft(pad)
 
     def getBits(self, idx:int, length:int) -> str:
-        self.waitForBits(idx + length)
+        if not self.waitForBits(idx + length):
+            return ""
     
         res = ""
         for n in range(idx, idx+length):
@@ -62,5 +70,7 @@ class BitQueue:
             return(-1)
         
         s = self.getBits(n, 10)
+        if (len(s) <= 0):
+            return -127;                    # No bits available, return -127 let caller determine has to handle this.
 
         return fromTENunit(s)

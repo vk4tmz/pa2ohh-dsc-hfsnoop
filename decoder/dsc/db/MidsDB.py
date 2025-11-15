@@ -2,7 +2,7 @@
 import logging
 import time
 
-from DSCConfig import DscConfig
+from decoder.dsc.config import DscConfig
 import pandas as pd
 
 class MidsDB:

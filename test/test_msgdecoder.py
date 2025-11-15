@@ -1,16 +1,15 @@
 
 import sys
-import re
 
 sys.path.insert(0, '..')
 sys.path.insert(0, '.')
 
-from utils import TENunit
-from decoder.Bits import BitQueue
-from decoder.DSCDecoder import HLINE
-from decoder.DSCMessageFactory import DSCMessageFactory
-from DSCConfig import DscConfig
-from db.DSCDatabases import DscDatabases
+from util.utils import TENunit
+from modem.Bits import BitQueue
+from decoder.dsc.decoder import HLINE
+from decoder.dsc.messages.message_factory import DSCMessageFactory
+from decoder.dsc.config import DscConfig
+from decoder.dsc.db.DSCDatabases import DscDatabases
 
 from collections import deque
 

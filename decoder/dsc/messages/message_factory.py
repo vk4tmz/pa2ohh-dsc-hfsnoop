@@ -5,14 +5,14 @@ import sys
 sys.path.insert(0, '..')
 sys.path.insert(0, '.')
 
-from utils import getMsgVal, writeStringToFile, getTimeStamp
-from decoder.DSCMessage import DscMessage, DscSelectiveGeographicAreaMsg, DscDistressAlertMsg,\
+from util.utils import getMsgVal, writeStringToFile, getTimeStamp
+from decoder.dsc.messages.message import DscMessage, DscSelectiveGeographicAreaMsg, DscDistressAlertMsg,\
             DscRoutineGroupCallMsg, DscAllShipCallMsg, DscSelectiveIndividualCallMsg,\
             DscSelectiveIndividualAutomaticCallMsg
-from decoder.DSCExpansionMessageFactory import DSCExpansionMessageFactory
-from decoder.Bits import BitQueue
-from db.DSCDatabases import DscDatabases
-from DSCConfig import DscConfig
+from decoder.dsc.messages.expansion_factory import DSCExpansionMessageFactory
+from modem.Bits import BitQueue
+from decoder.dsc.db.DSCDatabases import DscDatabases
+from decoder.dsc.config import DscConfig
 
 FORMAT_SPECIFIERS = [102, 112, 114, 116, 120, 123]  # 
 FORMAT_SPECIFIERS_SAME = [112, 116]                 # Distress and All Ships 

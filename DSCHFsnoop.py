@@ -19,13 +19,13 @@ import numpy
 import queue
 
 from audio import source
-from db.DSCDatabases import DscDatabases
-from DSCConfig import DscConfig
-from decoder.DSCDecoder import DSCDecoder, LM_AUTO, LM_MANUAL
-from decoder.DSCEvents import Event, FftUpdateEvent, NewDscMessageEvent, LogDscInfoEvent, LogDscResultEvent
-from decoder.DSCMessage import DscMessage, DscSelectiveIndividualCallMsg
+from decoder.dsc.db.DSCDatabases import DscDatabases
+from decoder.dsc.config import DscConfig
+from decoder.dsc.decoder import DSCDecoder, LM_AUTO, LM_MANUAL
+from events.events import Event, FftUpdateEvent, NewDscMessageEvent, LogDscInfoEvent, LogDscResultEvent
+from decoder.dsc.messages.message import DscMessage, DscSelectiveIndividualCallMsg
 
-from utils import getTimeStamp, writeStringToFile
+from util.utils import getTimeStamp, writeStringToFile
 
 dscCfg: DscConfig
 dscDB: DscDatabases

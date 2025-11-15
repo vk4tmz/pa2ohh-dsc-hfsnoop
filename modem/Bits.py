@@ -7,7 +7,7 @@ sys.path.insert(0, '.')
 
 from collections import deque
 from time import sleep
-from utils import fromTENunit
+from util.utils import fromTENunit
 
 WAIT_TIME_FOR_BITS  = 0.025
 WAIT_LOOP_FOR_BITS  = 20    # ~0.5sec we should have had data

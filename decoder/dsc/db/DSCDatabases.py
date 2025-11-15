@@ -1,10 +1,10 @@
 
 import logging
 
-from DSCConfig import DscConfig
-from db.CoastDB import CoastDB
-from db.ShipDB import ShipDB
-from db.MidsDB import MidsDB
+from decoder.dsc.config import DscConfig
+from decoder.dsc.db.CoastDB import CoastDB
+from decoder.dsc.db.ShipDB import ShipDB
+from decoder.dsc.db.MidsDB import MidsDB
 
 class DscDatabases:
 

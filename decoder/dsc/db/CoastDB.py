@@ -2,8 +2,8 @@
 import logging
 import time
 
-from DSCConfig import DscConfig
-from utils import getTimeStamp
+from decoder.dsc.config import DscConfig
+from util.utils import getTimeStamp
 
 class CoastDB:
 

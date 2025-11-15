@@ -1,10 +1,10 @@
 
 import logging
 
-from decoder.DSCExpansionMessage import DscEhancedPositionResolutionMsg, DscPositionSourceAndDatumMsg,\
+from decoder.dsc.messages.expansion import DscEhancedPositionResolutionMsg, DscPositionSourceAndDatumMsg,\
         DscVesselCurrentSpeedMsg, DscVesselCurrentCourseMsg, DscAdditionalInformationMsg,\
         DscEnhancedGeographicAreaMsg, DscNumberPersonsOnBoardMsg, DscExpansionMessage
-from utils import getMsgVal
+from util.utils import getMsgVal
 from collections import deque
 
 HLINE = "==================================="       # Message separation line

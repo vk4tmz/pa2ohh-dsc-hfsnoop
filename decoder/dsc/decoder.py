@@ -8,16 +8,16 @@ sys.path.insert(0, '.')
 
 from enum import Enum
 from pyventus.events import AsyncIOEventEmitter, EventEmitter, EventLinker
-from utils import TENunit, fromTENunit
+from util.utils import TENunit, fromTENunit
 
 from audio.source import AudioSource, RawAudioSource
-from decoder.Bits import BitQueue
-from decoder.FSKDemodulator import FSKDemodulator, LM_AUTO, LM_MANUAL
-from decoder.DSCMessageFactory import DSCMessageFactory
-from decoder.DSCEvents import NewDscMessageEvent, LogDscInfoEvent, LogDscResultEvent
+from modem.Bits import BitQueue
+from modem.FSKDemodulator import FSKDemodulator, LM_AUTO, LM_MANUAL
+from decoder.dsc.messages.message_factory import DSCMessageFactory
+from events.events import NewDscMessageEvent, LogDscInfoEvent, LogDscResultEvent
 
-from DSCConfig import DscConfig
-from db.DSCDatabases import DscDatabases
+from decoder.dsc.config import DscConfig
+from decoder.dsc.db.DSCDatabases import DscDatabases
 
 
 SHIFTfrequency = 170        # 170 for MF - HF

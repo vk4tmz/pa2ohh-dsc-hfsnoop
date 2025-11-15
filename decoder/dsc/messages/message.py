@@ -1,10 +1,10 @@
 
 import logging
 
-from DSCConfig import DscConfig
-from db.DSCDatabases import DscDatabases
-from decoder.DSCExpansionMessage import DscExpansionMessage
-from utils import getMsgVal, getMsgPaddedVals, getMsgPaddedValsVarLen, is_even
+from decoder.dsc.config import DscConfig
+from decoder.dsc.db.DSCDatabases import DscDatabases
+from decoder.dsc.messages.expansion import DscExpansionMessage
+from util.utils import getMsgVal, getMsgPaddedVals, getMsgPaddedValsVarLen, is_even
 
 from abc import ABCMeta
 

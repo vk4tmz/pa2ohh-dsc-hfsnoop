@@ -1,6 +1,6 @@
 
 from dataclasses import dataclass
-from decoder.DSCMessage import DscMessage
+from decoder.dsc.messages.message import DscMessage
 
 import numpy as np
 

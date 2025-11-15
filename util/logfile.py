@@ -1,5 +1,5 @@
 
-from utils import makedirs
+from util.utils import makedirs
 
 class LogFile:
     title:str

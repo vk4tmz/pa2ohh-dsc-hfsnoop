@@ -1,8 +1,8 @@
 
 import logging
 
-from db.DSCDatabases import DscDatabases
-from utils import getMsgVal, getMsgPaddedVals, getMsgPaddedValsVarLen, getMsgValsVarLen, popLeft
+from decoder.dsc.db.DSCDatabases import DscDatabases
+from util.utils import getMsgVal, getMsgPaddedVals, getMsgPaddedValsVarLen, getMsgValsVarLen, popLeft
 
 from collections import deque
 

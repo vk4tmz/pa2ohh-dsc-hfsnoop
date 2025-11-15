@@ -9,10 +9,9 @@ sys.path.insert(0, '..')
 sys.path.insert(0, '.')
 
 from pyventus.events import AsyncIOEventEmitter, EventEmitter, EventLinker
-from utils import TENunit, fromTENunit
 from audio.source import AudioSource, RawAudioSource
-from decoder.Bits import BitQueue
-from decoder.DSCEvents import FftUpdateEvent, LogDscInfoEvent, LogDscResultEvent
+from modem.Bits import BitQueue
+from events.events import FftUpdateEvent, LogDscInfoEvent, LogDscResultEvent
 from collections import deque
 from time import sleep
 

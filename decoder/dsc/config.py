@@ -1,8 +1,15 @@
 
+from enum import Enum
 from util.utils import makedirs
 from util.logfile import LogFile
 
 import logging
+
+class PreserveAudioHistory(Enum):
+    NO = 0,             # No audio history will be preserved
+    PARTIAL = 1,        # only audio for partial / failed decode msg after PhaseDX found.
+    FULL = 2,           # only 100% error free msg's 
+    BOTH = 3            # both PARTIAL & FULL
 
 class DscConfig:
 
@@ -17,6 +24,8 @@ class DscConfig:
     freqRxHz:int                # Used to identify UI and logs
     dataDir:str                 # Root level for Data files
     freqDataDir:str             # Root level for Data files specific to "frequency" (ie running multiple instances)
+    audioHistDir:str            # folder location for audio hist recordings
+    presAudioHist: PreserveAudioHistory
     dscAllLog:LogFile           # Log for all messages
     dscMinusTestLog:LogFile     # Log for messages except test messages
     dscSpecialMsgLog:LogFile    # Log for special messages like for example Distress or a special MMSI
@@ -50,7 +59,7 @@ class DscConfig:
 
     ensureFormatSpecifiersSame:bool = False  # ITU Spec - 4.2 Specifiers (112, 116 & 114) should have the value for both Format Specifier message fields.
 
-    def __init__(self, dataDir:str, freqRxHz:int, sampleRate:int, invertTones:bool=False, freqBand:int=0):
+    def __init__(self, dataDir:str, freqRxHz:int, sampleRate:int, invertTones:bool=False, freqBand:int=0, presAudioHist:str="no"):
         self.log = logging.getLogger("%s.%s" % (__name__, self.__class__.__name__))
         self.dataDir = dataDir
         self.freqRxHz = freqRxHz 
@@ -58,7 +67,10 @@ class DscConfig:
         self.invertTones = invertTones
         self.freqBand = freqBand
 
+
         self.freqDataDir = f"{self.dataDir}/{self.freqRxHz}"
+        self.audioHistDir = f"{self.freqDataDir}/audio_hist"
+        self.storePreserveAudioHistoryOption(presAudioHist)
         
         # log1
         self.dscAllLog = LogFile("DSC ALL MESSAGES", "dscall.txt", f"{self.freqDataDir}/DSCall")
@@ -76,9 +88,26 @@ class DscConfig:
         self.midsFilename = f"./mmsi_mids.csv"
 
         self.initializeFolders()
-    
+
+    def storePreserveAudioHistoryOption(self, audioHist:str):
+        match audioHist.lower():
+            case "part":
+                self.presAudioHist = PreserveAudioHistory.PARTIAL
+            case "full":
+                self.presAudioHist = PreserveAudioHistory.FULL
+            case "both":
+                self.presAudioHist = PreserveAudioHistory.BOTH
+            case _:
+                self.presAudioHist = PreserveAudioHistory.NO    
+
+    def presFullAudioHistory(self) -> bool:
+        return (self.presAudioHist in [PreserveAudioHistory.FULL, PreserveAudioHistory.BOTH] )
+
+    def presPartialAudioHistory(self) -> bool:
+        return (self.presAudioHist in [PreserveAudioHistory.PARTIAL, PreserveAudioHistory.BOTH] )
 
     def initializeFolders(self):
+        makedirs(self.audioHistDir)
         makedirs(self.dirDay);
         makedirs(self.dirCoast);
         makedirs(self.dirShip);

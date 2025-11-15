@@ -767,6 +767,7 @@ def processArgs(parser):
     parser.add_argument("-as", "--audio-src", type=str, default="alsa", choices=["alsa","-"], help="Source for audio feed. Expected s16be format for raw / STDIN feed.")
     parser.add_argument("-sr", "--sig-rate", type=int, default=44100, choices=[11025, 22050, 44100], help="Audio sample.")
     parser.add_argument("-fb", "--freq-band", type=int, default=0, choices=[0,1,2,3], help="Freq bands to auto search for tones. (0 - 400-2000Hz,  1 - 1000-2000Hz,  2 - 1200-1800Hz,  3 - 1400-2000Hz")
+    parser.add_argument("-ah", "--audio-hist", type=str, default="no", choices=["no", "full", "part", "both"], help="Preserve a copy of the raw audio (s16le). ")
     parser.add_argument("-dd", "--data-dir", type=str, default="./data", help="Root level for data files.")
     parser.add_argument("-inv", "--invert-tones", action='store_true', help="Invert Marker(Y) / Space(B) Tones.")
     
@@ -780,7 +781,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=APPTitle)
     args = processArgs(parser)
 
-    dscCfg = DscConfig(dataDir=args.data_dir,freqRxHz=args.freq_hz, sampleRate=args.sig_rate, invertTones=args.invert_tones, freqBand=args.freq_band)
+    dscCfg = DscConfig(dataDir=args.data_dir,freqRxHz=args.freq_hz, sampleRate=args.sig_rate, invertTones=args.invert_tones, freqBand=args.freq_band, presAudioHist=args.audio_hist)
     dscDB = DscDatabases(dscCfg)
 
     initializeUI(dscCfg)

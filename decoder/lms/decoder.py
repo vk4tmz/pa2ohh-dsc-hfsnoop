@@ -63,6 +63,7 @@ class LmsDecoder:
         self.dem = FSKDemodulator(audioSrc=audioSrc, shiftFreq=SHIFTfrequency, bitRate=BITrate, lockMode=lockMode,centerFreq=centerFreq, tonesInverted=tonesInverted)
         self.bits = self.dem.strYBY
         # self.msgFactory = DSCMessageFactory(bits=self.dem.strYBY, dscDB=self.dscDB)
+        self.lmsCfg = lmsCfg
         self._event_emitter = AsyncIOEventEmitter()
 
     def setDebugLevel(self, dbgLvl:int):
@@ -109,7 +110,6 @@ class LmsDecoder:
             txt += msgVals
             self.notifyLogResults(txt)
 
-
     def decoderHandler(self, startRunning:bool):
         
         if (self.decoderHandlerRunning):
@@ -140,7 +140,11 @@ class LmsDecoder:
                         #     e = NewDscMessageEvent(msg=msg)
                         #     self._event_emitter.emit(e)
 
+                        if (self.lmsCfg.presFullAudioHistory()):
+                            hist_fn = self.dem.preserveAudioHistory(self.lmsCfg.audioHistDir)
+                            self.log.info(f"Preserved audio data to file: [{hist_fn}].")
                     finally:
+                        self.dem
                         # Remove bits of at min the Phasing Sequence, to ensure all clear for next Phasing scan.
                         self.bits.removeBits(DXRX_PHASING_BIT_LEN+20)
                 else:

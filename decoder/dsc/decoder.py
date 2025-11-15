@@ -32,7 +32,7 @@ NEW_DEBUG = 0
 HLINE = "==================================="       # Message separation line
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s',
-                    level=logging.DEBUG)
+                    level=logging.INFO)
 
 
 @EventLinker.on(NewDscMessageEvent)
@@ -63,6 +63,7 @@ class DSCDecoder:
     def __init__(self, audioSrc:AudioSource, dscCfg: DscConfig, lockMode:str="A", centerFreq:int=1700, tonesInverted:bool=False):
         self.log = logging.getLogger("%s.%s" % (__name__, self.__class__.__name__))
 
+        self.dscCfg = dscCfg
         self.dscDB = DscDatabases(dscCfg)
         self.dem = FSKDemodulator(audioSrc=audioSrc, shiftFreq=SHIFTfrequency, bitRate=BITrate, lockMode=lockMode,centerFreq=centerFreq, tonesInverted=tonesInverted)
         self.bits = self.dem.strYBY
@@ -137,14 +138,27 @@ class DSCDecoder:
                         msg = self.msgFactory.processMessage()
 
                         if msg:
+                            if (self.dscCfg.presFullAudioHistory()):
+                                hist_fn, hist_sz = self.dem.preserveAudioHistory(self.dscCfg.audioHistDir, suffix="full")
+                                self.log.info(f"Preserved audio data to file: [{hist_fn}] size: [{hist_sz}].")
+
                             e = NewDscMessageEvent(msg=msg)
                             self._event_emitter.emit(e)
+                        else:
+                            if (self.dscCfg.presPartialAudioHistory()):
+                                hist_fn = self.dem.preserveAudioHistory(self.dscCfg.audioHistDir, suffix="part")
+                                self.log.info(f"Preserved audio data to file: [{hist_fn}].")
+                            else:
+                                self.dem.clearAudioHistory()
+
 
                     finally:
                         # Remove bits of at min the Phasing Sequence, to ensure all clear for next Phasing scan.
                         self.bits.removeBits(DXRX_PHASING_BIT_LEN+20)
+                        
                 else:
                     self.log.debug(f"No PhasingDX Found....")
+                    self.dem.clearAudioHistory()
         finally:
             self.dem.stopDemodulator()
 

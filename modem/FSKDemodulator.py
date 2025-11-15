@@ -2,12 +2,15 @@
 import logging
 import math
 import numpy
+import struct
 import sys
 import threading
+import time
 
 sys.path.insert(0, '..')
 sys.path.insert(0, '.')
 
+from dataclasses import dataclass
 from pyventus.events import AsyncIOEventEmitter, EventEmitter, EventLinker
 from audio.source import AudioSource, RawAudioSource
 from modem.Bits import BitQueue
@@ -20,6 +23,12 @@ LM_AUTO = "A"
 LM_MANUAL = "M"
 
 WAIT_TIME_FOR_AUDIO = 0.02
+
+@dataclass
+class StoreDataRecord():
+    fn: str
+    bufs: list
+
 
 ############################################################################################################################################
 # Initialisation of global variables required in various routines (MODIFY THEM ONLY IF NECESSARY!)
@@ -36,11 +45,16 @@ class FSKDemodulator:
     audioSrc: AudioSource
     audioSignalA:deque
     audioSignal1:deque
+    audioSignal1Hist:deque
     audioHandlerRunning:bool = False
     audioHandlerThread:threading.Thread
 
     demHandlerRunning:bool = False
     demodHandlerThread:threading.Thread
+
+    storeDataHandlerRunning:bool = False
+    storeDataHandlerThread:threading.Thread
+    storeDataQ:deque[StoreDataRecord]
 
     strYBY: BitQueue 
     markSym: str = "Y"
@@ -190,11 +204,13 @@ class FSKDemodulator:
 
     def demodulatorHandler(self):
         self.audioSignal1 = deque([])
+        self.audioSignal1Hist = deque([])
         while (self.demHandlerRunning):
             self.MakeYBY()
 
 
     def startDemodulator(self):
+        self.startStoreDataProcess();
         self.startAudioHandler();
         
         self.demodHandlerThread = threading.Thread(target=self.demodulatorHandler, args=(), daemon=True)
@@ -206,7 +222,48 @@ class FSKDemodulator:
 
         self.demHandlerRunning = False
         self.demodHandlerThread.join(2.0)   # wait for the audio thread to complete
-    
+
+        self.stopStoreDataProcess();
+
+    ########################################################################################################
+    # Decoder Handler
+    ########################################################################################################
+
+    def storeDataHandler(self):
+        self.storeDataQ = deque([])
+
+        while (self.storeDataHandlerRunning):
+            qlen = len(self.storeDataQ)
+            for n in range(0, qlen):
+                drec = self.storeDataQ.popleft()
+
+                cnt = 0;
+                packed_data = bytes()
+                with open(drec.fn, 'wb') as f:
+                    for buf in drec.bufs:
+                        for value in buf:
+                            packed_data += struct.pack('<h', value)
+                            cnt += 2
+
+                    #Write bytes     
+                    f.write(packed_data)                
+
+                    # TODO: switch back to debug
+                    self.log.info(f"storeDataHandler(): Stored [{cnt}] byte(s) to File: [{drec.fn}].")
+
+            # Have a snooze..
+            sleep(0.250)
+
+    def startStoreDataProcess(self):        
+        self.storeDataHandlerThread = threading.Thread(target=self.storeDataHandler, args=(), daemon=True)
+        self.storeDataHandlerRunning = True
+        self.storeDataHandlerThread.start()
+
+    def stopStoreDataProcess(self):
+        self.storeDataHandlerRunning = False
+        self.storeDataHandlerThread.join(2.0)   # wait for the audio thread to complete
+
+
 
     # ============= Do an FFT =======================
     def DoFFT(self, FROMsample, Length):                              # Fast Fourier transformation and others like noise blanker and level for audio meter and time markers
@@ -371,8 +428,10 @@ class FSKDemodulator:
 
             self.bitStepFrac = self.bitStepFrac + self.bitStep - int(self.bitStep)               # Fractional counter
             purgeNBits = int(self.bitStep + int(self.bitStepFrac) + self.syncTcor)
+            buf = []
             for n in range(0, purgeNBits):        # Delete the samples of a bit
-                self.audioSignal1.popleft()
+                buf.append(self.audioSignal1.popleft())
+            self.audioSignal1Hist.append(buf)
 
             self.bitStepFrac = self.bitStepFrac - int(self.bitStepFrac)                          # Only fractional part
             self.syncTcor = 0                                                                    # Reset SYNCTcor
@@ -381,7 +440,30 @@ class FSKDemodulator:
 
         # Update UI
         self.postFftpUpdateEvent()
+
+    def preserveAudioHistory(self, audioHistDir:str, suffix: str="audio"):
+        # grab size of the history queue as background process is continually writing to buffer after each FFT cycle.
+        hbs = len(self.audioSignal1Hist)
+
+        ts =  time.strftime("%Y%m%d_%H%M%S", time.gmtime())
+        audiohist_fn = f"{audioHistDir}/{ts}_{suffix}.raw"
+
+        bufs = []
+        for n in range(0, hbs):
+            bufs.append(self.audioSignal1Hist.popleft())
+                
+        drec = StoreDataRecord(audiohist_fn, bufs)
+        self.storeDataQ.append(drec)
+
+        return audiohist_fn;
     
+    def clearAudioHistory(self):
+        hbs = len(self.audioSignal1Hist)
+        for n in range(0, hbs):
+                buf = self.audioSignal1Hist.popleft()
+        
+        
+
     def setLockFreq(self, isLocked:bool):
         self.isLockFreq = isLocked
 

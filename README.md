@@ -18,8 +18,7 @@ pip install tk pyaudio numpy
 The Commands syntax / options are:
 
 ```
-$ python DSCHFsnoop.py -h
-usage: DSCHFsnoop.py [-h] [-as {alsa,-}] [-sr {11025,22050,44100}] [-dd DATA_DIR] [-inv] freq_hz
+usage: DSCHFsnoop.py [-h] [-as {alsa,-}] [-sr {11025,22050,44100}] [-fb {0,1,2,3}] [-ah {no,full,partial,both}] [-dd DATA_DIR] [-inv] freq_hz
 
 MF-HF-DSC Decoder
 
@@ -32,6 +31,10 @@ options:
                         Source for audio feed. Expected s16be format for raw / STDIN feed.
   -sr {11025,22050,44100}, --sig-rate {11025,22050,44100}
                         Audio sample.
+  -fb {0,1,2,3}, --freq-band {0,1,2,3}
+                        Freq bands to auto search for tones. (0 - 400-2000Hz, 1 - 1000-2000Hz, 2 - 1200-1800Hz, 3 - 1400-2000Hz
+  -ah {no,full,part,both}, --audio-hist {no,full,part,both}
+                        Preserve a copy of the raw audio (s16le).
   -dd DATA_DIR, --data-dir DATA_DIR
                         Root level for data files.
   -inv, --invert-tones  Invert Marker(Y) / Space(B) Tones.

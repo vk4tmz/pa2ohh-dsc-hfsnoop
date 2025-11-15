@@ -594,7 +594,7 @@ def DSCsave(msg:DscMessage):
     out = []    
     msg.print(out)
     DSCMSG = f"{HLINE}\n"
-    DSCMSG += f"[{getTimeStamp()}\n]"
+    DSCMSG += f"[{getTimeStamp()}]\n"
     for ln in out:
         DSCMSG += f"{ln}\n"
     

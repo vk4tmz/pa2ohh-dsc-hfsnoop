@@ -69,6 +69,8 @@ DSC_END_OF_SEQUENCE = {
     122: "Acknowledgement given",
     127: "Non acknowledgements"}
 
+HLINE = "==================================="       # Message separation line
+
 #######################################################################
 #  class DSCMessage
 #######################################################################
@@ -101,7 +103,16 @@ class DscMessage(metaclass=ABCMeta):
 
     def print(self, out: list):
         out.append(f"FMS-{self.fmtSpecId}: {self.fmtSpecDesc}")
-    
+
+    def printAsString(self) -> str:
+        
+        out = []
+        self.print(out)
+        txt = HLINE
+        for ln in out:
+            txt += "\n" + ln
+        
+        return txt
 
 #######################################################################
 #  DSCMessage common utililties and Helper functions
@@ -128,13 +139,13 @@ class DscZone:
 
         v = int(pos[0:1]);
         match v:
-            case "0":
+            case 0:
                 self.azimuthSector = "NE"
-            case "1":
+            case 1:
                 self.azimuthSector = "NW"
-            case "2":
+            case 2:
                 self.azimuthSector = "SE"
-            case "3":
+            case 3:
                 self.azimuthSector = "SW"
             case _:
                 self.azimuthSector = ""
@@ -156,10 +167,10 @@ class DscZone:
             txt += self.azimuthSector
         out.append(txt)
         
-        out.append(" Latitude ref. point : " + self.latRef)
-        out.append(" Longitude ref. point: " + self.lonRef)
-        out.append(" Latitude N/S offset : " + self.latBRRef)
-        out.append(" Longitude W/E offset: " + self.lonBRRef)
+        out.append("Latitude ref. point : " + self.latRef)
+        out.append("Longitude ref. point: " + self.lonRef)
+        out.append("Latitude N/S offset : " + self.latBRRef)
+        out.append("Longitude W/E offset: " + self.lonBRRef)
 
 
 class DscCategory:
@@ -494,7 +505,7 @@ class DscFrequency:
 
         if int(self.frequency[0]) < 3:
             # ... Frequency ...
-            out.append(f"{pretext}  {str(round(float(self.frequency[0:6])/10,1))} kHz")
+            out.append(f"{pretext} {str(round(float(self.frequency[0:6])/10,1))} kHz")
             return
 
         if self.frequency[0] == "3":

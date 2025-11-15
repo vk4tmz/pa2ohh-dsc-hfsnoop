@@ -1,5 +1,9 @@
 
 import logging
+import sys
+
+sys.path.insert(0, '..')
+sys.path.insert(0, '.')
 
 from utils import getMsgVal, writeStringToFile, getTimeStamp
 from decoder.DSCMessage import DscMessage, DscSelectiveGeographicAreaMsg, DscDistressAlertMsg,\
@@ -8,6 +12,7 @@ from decoder.DSCMessage import DscMessage, DscSelectiveGeographicAreaMsg, DscDis
 from decoder.DSCExpansionMessageFactory import DSCExpansionMessageFactory
 from decoder.Bits import BitQueue
 from db.DSCDatabases import DscDatabases
+from DSCConfig import DscConfig
 
 FORMAT_SPECIFIERS = [102, 112, 114, 116, 120, 123]  # 
 FORMAT_SPECIFIERS_SAME = [112, 116]                 # Distress and All Ships 
@@ -159,7 +164,7 @@ class DSCMessageFactory:
 
     def recordMsgsData(self, fmtSpecId:int, msgData: list, expMsgData: list):
         writeStringToFile(f"{self.dscDB.dscCfg.freqDataDir}/msgdata_tests.txt",
-                          f"{fmtSpecId}|{msgData}|{expMsgData}|{getTimeStamp()}", append=True)
+                          f"{fmtSpecId}|{msgData}|{expMsgData}|{getTimeStamp()}\n", append=True)
 
     def selectMessageDecoder(self, msgData, expMsgData) -> DscMessage | None:
         
@@ -197,4 +202,24 @@ class DSCMessageFactory:
 
         return msg
         
+###########################################################
+## Main / Test
+###########################################################
+
+def main():
+
+    bitsQ = BitQueue()
+    dscCfg = DscConfig(dataDir='./data', freqRxHz=9999999, sampleRate=44100)
+    dscDB = DscDatabases(dscCfg)
+    msgF = DSCMessageFactory(bitsQ, dscDB)
     
+    msgData = [102, 21, 11, 28, 3, 3, 110, 0, 50, 30, 0, 10, 109, 126, 8, 29, 10, 8, 29, 10, 127, 64]
+
+    msg = msgF.selectMessageDecoder(msgData, expMsgData=[])
+    if msg:
+        out = []
+        print(msg.printAsString())
+
+
+if __name__ == "__main__":
+    main()

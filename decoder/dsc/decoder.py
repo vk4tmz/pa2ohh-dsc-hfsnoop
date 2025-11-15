@@ -31,7 +31,8 @@ PHASEDXbits = TENunit(125)
 NEW_DEBUG = 0
 HLINE = "==================================="       # Message separation line
 
-# logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s',
+                    level=logging.DEBUG)
 
 
 @EventLinker.on(NewDscMessageEvent)

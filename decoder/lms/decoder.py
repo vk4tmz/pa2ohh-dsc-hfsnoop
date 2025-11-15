@@ -8,16 +8,15 @@ sys.path.insert(0, '.')
 
 from enum import Enum
 from pyventus.events import AsyncIOEventEmitter, EventEmitter, EventLinker
-from utils import TENunit, fromTENunit
+from util.utils import TENunit, fromTENunit
 
 from audio.source import AudioSource, RawAudioSource
-from decoder.Bits import BitQueue
-from decoder.FSKDemodulator import FSKDemodulator, LM_AUTO, LM_MANUAL
-from decoder.DSCMessageFactory import DSCMessageFactory
-from decoder.DSCEvents import NewDscMessageEvent, LogDscInfoEvent, LogDscResultEvent
+from modem.Bits import BitQueue
+from modem.FSKDemodulator import FSKDemodulator, LM_AUTO, LM_MANUAL
+from decoder.dsc.messages.message_factory import DSCMessageFactory
+from events.events import NewDscMessageEvent, LogDscInfoEvent, LogDscResultEvent
 
-from SelcallConfig import SelcallConfig
-from db.DSCDatabases import DscDatabases
+from decoder.lms.config import LmsConfig
 
 
 SHIFTfrequency = 170        # 170 for MF - HF
@@ -31,22 +30,23 @@ PHASEDXbits = TENunit(125)
 NEW_DEBUG = 0
 HLINE = "==================================="       # Message separation line
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s',
+                    level=logging.DEBUG)
 
 
 @EventLinker.on(NewDscMessageEvent)
 def printNewMessage(e:NewDscMessageEvent):
-    print(e.msg.printAsString())
+    print(e.msg.printAsString(), flush=True)
 
 @EventLinker.on(LogDscResultEvent)
 def printLogResultMessage(e:LogDscResultEvent):
-    print(e.txt)
+    print(e.txt, flush=True)
 
-class SelcallDecoder:
+class LmsDecoder:
 
     dem: FSKDemodulator
     bits: BitQueue
-    selcallCfg: SelcallConfig
+    lmsCfg: LmsConfig
     msgFactory: DSCMessageFactory
 
     log: logging.Logger
@@ -57,7 +57,7 @@ class SelcallDecoder:
 
     _event_emitter:EventEmitter
 
-    def __init__(self, audioSrc:AudioSource, selcallCfg: SelcallConfig, lockMode:str="A", centerFreq:int=1785, tonesInverted:bool=False):
+    def __init__(self, audioSrc:AudioSource, lmsCfg: LmsConfig, lockMode:str="A", centerFreq:int=1785, tonesInverted:bool=False):
         self.log = logging.getLogger("%s.%s" % (__name__, self.__class__.__name__))
 
         self.dem = FSKDemodulator(audioSrc=audioSrc, shiftFreq=SHIFTfrequency, bitRate=BITrate, lockMode=lockMode,centerFreq=centerFreq, tonesInverted=tonesInverted)
@@ -118,6 +118,8 @@ class SelcallDecoder:
         self.decoderHandlerRunning = startRunning
 
         self.dem.startDemodulator()
+        self.log.info("FSKModulator and LMSDecoder started...")
+        logging.StreamHandler().flush()
         try:
             while (self.decoderHandlerRunning):
                 self.dem.setLockFreq(False)
@@ -270,11 +272,11 @@ def main():
     sampleRate = 44100
     # sampleRate = 22050
     audioSrc = RawAudioSource(src=sys.stdin.buffer, sampleRate=sampleRate)
-    selcallCfg = SelcallConfig(dataDir="./data", freqRxHz=999999, sampleRate=sampleRate)
+    selcallCfg = LmsConfig(dataDir="./data", freqRxHz=999999, sampleRate=sampleRate)
 
-    # dec = SelcallDecoder(audioSrc, selcallCfg, lockMode=LM_MANUAL, centerFreq=1785)
-    # dec = SelcallDecoder(audioSrc, selcallCfg, lockMode=LM_AUTO)
-    dec = SelcallDecoder(audioSrc, selcallCfg, lockMode=LM_AUTO, tonesInverted=True)
+    # dec = LmsDecoder(audioSrc, selcallCfg, lockMode=LM_MANUAL, centerFreq=1785)
+    # dec = LmsDecoder(audioSrc, selcallCfg, lockMode=LM_AUTO)
+    dec = LmsDecoder(audioSrc, selcallCfg, lockMode=LM_AUTO, tonesInverted=True)
 
     dec.setDebugLevel(2)
     dec.startDecoder()

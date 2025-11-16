@@ -37,7 +37,6 @@ class DscConfig(Config):
 
     def __init__(self, dataDir:str, freqRxHz:int, sampleRate:int, invertTones:bool=False, freqBand:int=0, presAudioHist:str="no"):
         super().__init__(dataDir, freqRxHz, sampleRate, invertTones, freqBand, presAudioHist)
-        pass
 
     def setupConfig(self):
         super().setupConfig()

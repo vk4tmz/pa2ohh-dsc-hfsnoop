@@ -16,8 +16,7 @@ class LmsConfig(Config):
     
 
     def __init__(self, dataDir:str, freqRxHz:int, sampleRate:int, invertTones:bool=False, freqBand:int=0, presAudioHist:str="no"):
-        super().__init__(dataDir, freqRxHz, sampleRate, invertTones, freqBand, presAudioHist)
-        pass
+        super().__init__(dataDir, freqRxHz, sampleRate, invertTones, freqBand, presAudioHist)    
     
     def setupConfig(self):
         super().setupConfig()
@@ -28,5 +27,4 @@ class LmsConfig(Config):
 
     def initializeFolders(self):
         super().initializeFolders()
-        pass
         

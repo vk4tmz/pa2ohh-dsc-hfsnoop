@@ -51,10 +51,11 @@ class Config:
         self.initializeFolders()
 
     def setupConfig(self):
-        pass
+        return
         
     def initializeFolders(self):
-        makedirs(self.freqDataDir);
+        makedirs(self.freqDataDir)
+        makedirs(self.audioHistDir)
     
     def storePreserveAudioHistoryOption(self, audioHist:str):
         match audioHist.lower():

@@ -17,6 +17,7 @@ from modem.Bits import BitQueue
 from events.events import FftUpdateEvent, LogDscInfoEvent, LogDscResultEvent
 from collections import deque
 from time import sleep
+from util.utils import writeBytesToFile,intArrayListToBytes
 
 MAX_AUDIO_BUFFER_SIZE = 44100 * 30; 
 LM_AUTO = "A"
@@ -237,19 +238,10 @@ class FSKDemodulator:
             for n in range(0, qlen):
                 drec = self.storeDataQ.popleft()
 
-                cnt = 0;
-                packed_data = bytes()
-                with open(drec.fn, 'wb') as f:
-                    for buf in drec.bufs:
-                        for value in buf:
-                            packed_data += struct.pack('<h', value)
-                            cnt += 2
-
-                    #Write bytes     
-                    f.write(packed_data)                
-
-                    # TODO: switch back to debug
-                    self.log.info(f"storeDataHandler(): Stored [{cnt}] byte(s) to File: [{drec.fn}].")
+                data = intArrayListToBytes(drec.bufs)
+                writeBytesToFile(drec.fn, data)
+                
+                self.log.debug(f"storeDataHandler(): Stored [{len(data)}] byte(s) to File: [{drec.fn}].")
 
             # Have a snooze..
             sleep(0.250)

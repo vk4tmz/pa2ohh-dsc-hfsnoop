@@ -1,4 +1,5 @@
 
+import numpy
 import os
 import time
 
@@ -38,6 +39,24 @@ def writeStringToFile(out_fn: str, item: str, append: bool=True):
         file.write(item)
 
     return 0
+
+def writeBytesToFile(out_fn: str, data:bytes):
+    with open(out_fn, 'wb') as f:
+        f.write(data)
+
+def intListToBytes(ia: list[int]):
+    arr = numpy.array(numpy.empty(0, dtype=numpy.int16))
+    arr = numpy.append(arr, buf)
+
+    return arr.tobytes()
+
+def intArrayListToBytes(bufs: list[list[int]]):
+    arr = numpy.array(numpy.empty(0, dtype=numpy.int16))
+    for buf in bufs:
+        arr = numpy.append(arr, buf)
+
+    return arr.tobytes()
+
 
 def is_even(v:int):
     return ((v % 2) == 0)

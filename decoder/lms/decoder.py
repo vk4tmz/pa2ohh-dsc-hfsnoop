@@ -14,9 +14,10 @@ from audio.source import AudioSource, RawAudioSource
 from modem.Bits import BitQueue
 from modem.FSKDemodulator import FSKDemodulator, LM_AUTO, LM_MANUAL
 from decoder.dsc.messages.message_factory import DSCMessageFactory
+from decoder.lms.config import LmsConfig
 from events.events import NewDscMessageEvent, LogDscInfoEvent, LogDscResultEvent
 
-from decoder.lms.config import LmsConfig
+from decoder.config import PreserveAudioHistory
 
 
 SHIFTfrequency = 170        # 170 for MF - HF
@@ -276,11 +277,12 @@ def main():
     sampleRate = 44100
     # sampleRate = 22050
     audioSrc = RawAudioSource(src=sys.stdin.buffer, sampleRate=sampleRate)
-    selcallCfg = LmsConfig(dataDir="./data", freqRxHz=999999, sampleRate=sampleRate)
+    lmsCfg = LmsConfig(dataDir="./data", freqRxHz=999999, sampleRate=sampleRate)
+    lmsCfg.presAudioHist = PreserveAudioHistory.BOTH
 
-    # dec = LmsDecoder(audioSrc, selcallCfg, lockMode=LM_MANUAL, centerFreq=1785)
-    # dec = LmsDecoder(audioSrc, selcallCfg, lockMode=LM_AUTO)
-    dec = LmsDecoder(audioSrc, selcallCfg, lockMode=LM_AUTO, tonesInverted=True)
+    # dec = LmsDecoder(audioSrc, lmsCfg, lockMode=LM_MANUAL, centerFreq=1785)
+    # dec = LmsDecoder(audioSrc, lmsCfg, lockMode=LM_AUTO)
+    dec = LmsDecoder(audioSrc, lmsCfg, lockMode=LM_AUTO, tonesInverted=True)
 
     dec.setDebugLevel(2)
     dec.startDecoder()

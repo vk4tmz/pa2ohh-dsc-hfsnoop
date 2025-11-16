@@ -139,8 +139,8 @@ class DSCDecoder:
 
                         if msg:
                             if (self.dscCfg.presFullAudioHistory()):
-                                hist_fn, hist_sz = self.dem.preserveAudioHistory(self.dscCfg.audioHistDir, suffix="full")
-                                self.log.info(f"Preserved audio data to file: [{hist_fn}] size: [{hist_sz}].")
+                                hist_fn = self.dem.preserveAudioHistory(self.dscCfg.audioHistDir, suffix="full")
+                                self.log.info(f"Preserved audio data to file: [{hist_fn}].")
 
                             e = NewDscMessageEvent(msg=msg)
                             self._event_emitter.emit(e)
